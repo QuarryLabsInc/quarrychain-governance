@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { WalletProviders } from "@/components/wallet/WalletProviders";
 import { THEME_INIT_SCRIPT } from "@/hooks/useTheme";
 import "./globals.css";
 
@@ -35,14 +37,21 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <head>
-        {/* Runs before first paint to avoid a flash of the wrong theme. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Runs before first paint to avoid a flash of the wrong theme.
+            next/script (not a raw <script>) so client-side re-renders —
+            e.g. router.refresh() from the explorer's live feed — don't
+            re-encounter it as an unexecuted script tag. */}
+        <Script id="theme-init" strategy="beforeInteractive">
+          {THEME_INIT_SCRIPT}
+        </Script>
       </head>
       <body className="flex min-h-full flex-col bg-surface font-sans">
-        <AppHeader />
-        <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-8 p-6 lg:p-8">
-          {children}
-        </main>
+        <WalletProviders>
+          <AppHeader />
+          <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-8 p-6 lg:p-8">
+            {children}
+          </main>
+        </WalletProviders>
       </body>
     </html>
   );
