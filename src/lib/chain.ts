@@ -18,6 +18,8 @@ export const CHAIN = {
   name: "QuarryChain Testnet",
   nativeCurrency: { name: "Quarry", symbol: "QRY", decimals: 18 },
   rpcUrl: "https://rpc.testnet.quarrychain.network",
+  /** Same EVM JSON-RPC node, over WebSocket. Public already — see guide.md. */
+  wsUrl: "wss://rpc.testnet.quarrychain.network/ws",
   explorerUrl: "https://explorer.testnet.quarrychain.network",
   /** Observed average block time in ms. Drives the telemetry ticker cadence. */
   blockTimeMs: 3600,

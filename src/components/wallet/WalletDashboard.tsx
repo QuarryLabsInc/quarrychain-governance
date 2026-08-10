@@ -1,27 +1,83 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
 import { ValidatorIcon } from "@/components/governance/ValidatorIcon";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { TokenLogo } from "@/components/ui/TokenLogo";
+import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { formatNumber, shortenAddress } from "@/lib/format";
 import { getProvider } from "@/lib/providers";
-import type {
-  ActiveDelegation,
-  EarningsEvent,
-  TokenBalance,
-  WalletSummary,
-} from "@/lib/types";
+import type { ActiveDelegation, EarningsEvent, TokenBalance, WalletSummary } from "@/lib/types";
 
 /**
  * Quarry Wallet Dashboard.
  *
  * Layout is based on the RWA Marketplace demo Alec referenced, with the RWA
  * Holdings section replaced by Manage Pool / Active Delegations (moved out of
- * the voting flow). Simulated until wallet connect lands in Phase 6 — the note
- * under the header says so, per the app's honesty rule.
+ * the voting flow). Reports on whatever wallet is actually connected via the
+ * header's ConnectButton — see src/lib/providers/liveWallet.ts for what's
+ * real (QRY balance) versus honestly empty (delegations/staking rewards,
+ * blocked on Cosmos REST not being public yet).
  */
-export function WalletDashboard({ summary }: { summary: WalletSummary }) {
+export function WalletDashboard() {
+  const { address, isConnected } = useAccount();
+  const [summary, setSummary] = useState<WalletSummary | null>(null);
+  // Tracks which address `summary` was fetched for, so "loading" can be
+  // derived instead of tracked via its own setState call in the effect below
+  // (eslint's react-hooks/set-state-in-effect rule disallows calling setState
+  // synchronously in an effect body — only from within the .then callback).
+  const [fetchedFor, setFetchedFor] = useState<string | null>(null);
+  const loading = Boolean(address) && fetchedFor !== address;
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    getProvider()
+      .wallet.getSummary(address)
+      .then((result) => {
+        if (cancelled) return;
+        setSummary(result);
+        setFetchedFor(address);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
+
+  if (!isConnected) {
+    return (
+      <div className="mx-auto max-w-lg rounded-xl border border-border bg-card p-8 text-center shadow-sm">
+        <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-brand-tint text-xl text-brand">
+          <TokenLogo size={22} />
+        </span>
+        <h1 className="text-xl font-bold text-heading">Connect Your Wallet</h1>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
+          Connect a wallet to view your real QRY balance on the QuarryChain
+          testnet. Staking positions and rewards need the Cosmos staking
+          module, which isn&apos;t publicly exposed yet — they&apos;ll show up
+          here once it is.
+        </p>
+        <div className="mt-6 flex justify-center">
+          <WalletConnectButton />
+        </div>
+      </div>
+    );
+  }
+
+  if (loading || !summary) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted shadow-sm">
+        Loading wallet…
+      </div>
+    );
+  }
+
+  return <ConnectedWallet summary={summary} />;
+}
+
+function ConnectedWallet({ summary }: { summary: WalletSummary }) {
   // Local delegation state so Vote Out / auto-compound feel live in the demo.
   const [delegations, setDelegations] = useState(summary.delegations);
   const [busy, setBusy] = useState<string | null>(null);
@@ -68,14 +124,11 @@ export function WalletDashboard({ summary }: { summary: WalletSummary }) {
           QuarryWallet Dashboard
         </h1>
         <p className="mt-1 text-xs text-muted">
-          Your QRY balances, delegations, and staking rewards.{" "}
-          <span className="text-warning">
-            Simulated — wallet connect arrives in Phase 6.
-          </span>
+          Your QRY balances, delegations, and staking rewards.
         </p>
       </div>
 
-      {/* Wallet address + credentials */}
+      {/* Wallet address */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-6 shadow-sm">
         <div>
           <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
@@ -94,40 +147,48 @@ export function WalletDashboard({ summary }: { summary: WalletSummary }) {
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {["KYC Certified", "Accredited Investor", "ZKP Protected"].map((b) => (
-            <span
-              key={b}
-              className="rounded-full border border-brand/30 bg-brand-tint px-3 py-1 text-[11px] font-bold text-brand"
-            >
-              {b}
-            </span>
-          ))}
-        </div>
       </div>
+
+      {delegations.length === 0 && summary.balances.length > 0 && (
+        <p className="rounded-xl border border-warning/40 bg-warning-tint px-4 py-3 text-xs font-medium text-warning">
+          Staking positions and rewards aren&apos;t available yet — they read
+          from the Cosmos staking module, which isn&apos;t publicly exposed on
+          this testnet. QRY balance below is real.{" "}
+          <Link href="/onboarding" className="underline">
+            Become a miner
+          </Link>{" "}
+          to delegate once it is.
+        </p>
+      )}
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Total Staked"
           value={
-            <span className="flex items-center gap-1.5">
-              {formatNumber(totalStaked)} <TokenLogo size={16} />
-            </span>
+            totalStaked === 0 ? (
+              "N/A"
+            ) : (
+              <span className="flex items-center gap-1.5">
+                {formatNumber(totalStaked)} <TokenLogo size={16} />
+              </span>
+            )
           }
           tone="brand"
         />
         <MetricCard
           label="Today's Change"
-          value={`+${summary.todayChangeQry.toFixed(1)} QRY`}
-          hint={`+${summary.todayChangePct.toFixed(2)}%`}
-          tone="success"
+          value={
+            summary.todayChangeQry === 0 ? "N/A" : `+${summary.todayChangeQry.toFixed(1)} QRY`
+          }
+          hint={summary.todayChangeQry === 0 ? undefined : `+${summary.todayChangePct.toFixed(2)}%`}
+          tone={summary.todayChangeQry === 0 ? "default" : "success"}
         />
         <MetricCard
           label="Total Yield Earned"
-          value={`${formatNumber(summary.totalYieldQry)} QRY`}
+          value={summary.totalYieldQry === 0 ? "N/A" : `${formatNumber(summary.totalYieldQry)} QRY`}
         />
-        <MetricCard label="Active Delegations" value={activeCount} />
+        <MetricCard label="Active Delegations" value={activeCount === 0 ? "N/A" : activeCount} />
       </div>
 
       {/* Crypto balances */}
@@ -137,7 +198,9 @@ export function WalletDashboard({ summary }: { summary: WalletSummary }) {
         </h2>
         <div className="grid gap-4 sm:grid-cols-3">
           {summary.balances.map((b) => (
-            <BalanceCard key={b.symbol} balance={b} />
+            // Symbol alone isn't unique — native QRY and the bridged QRY
+            // ERC-20 both use `QRY`; name disambiguates them.
+            <BalanceCard key={`${b.symbol}-${b.name}`} balance={b} />
           ))}
         </div>
       </section>
@@ -203,7 +266,7 @@ export function WalletDashboard({ summary }: { summary: WalletSummary }) {
 }
 
 function BalanceCard({ balance }: { balance: TokenBalance }) {
-  const isQuarry = balance.symbol === "QRY" || balance.symbol === "QSD";
+  const isQuarry = balance.symbol === "QRY";
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-surface p-4">
       {isQuarry ? (

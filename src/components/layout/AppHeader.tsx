@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 
 /**
  * Sticky global header.
@@ -91,6 +92,8 @@ export function AppHeader() {
         >
           Become a Miner
         </Link>
+
+        <WalletConnectButton />
 
         <ThemeToggle />
       </div>

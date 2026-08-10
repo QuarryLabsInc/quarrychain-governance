@@ -128,7 +128,14 @@ export interface Delegation {
 
 /* ---- Quarry Wallet Dashboard ---- */
 
-export type TokenSymbol = "QRY" | "QSD" | "USDT";
+/**
+ * Not a closed set: live balances come from whatever ERC-20 tokens Blockscout
+ * has indexed for the connected address (src/lib/providers/liveWallet.ts),
+ * which can't be known statically. Two entries can legitimately share a
+ * symbol — e.g. native QRY and the bridged "Bridged QRY" ERC-20 both use
+ * `QRY` — disambiguate by `name`, not `symbol`.
+ */
+export type TokenSymbol = string;
 
 export interface TokenBalance {
   symbol: TokenSymbol;
