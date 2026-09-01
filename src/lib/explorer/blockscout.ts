@@ -6,6 +6,7 @@ import type {
   ExplorerTransaction,
   SearchResult,
 } from "@/lib/explorer/types";
+import type { TokenBalance } from "@/lib/types";
 
 /**
  * Live Blockscout REST client.
@@ -190,6 +191,35 @@ export async function getAddressTransactions(
 ): Promise<ExplorerTransaction[]> {
   const data = await api<{ items: RawTx[] }>(`/addresses/${hash}/transactions`, 30);
   return data?.items ? data.items.map(mapTx) : [];
+}
+
+interface RawTokenBalance {
+  token: {
+    address: string;
+    decimals: string | null;
+    name: string | null;
+    symbol: string | null;
+    type: string;
+  };
+  value: string;
+}
+
+/** ERC-20 balances for an address. Blockscout returns a bare array, no `items` wrapper. */
+export async function getAddressTokenBalances(hash: string): Promise<TokenBalance[]> {
+  const data = await api<RawTokenBalance[]>(`/addresses/${hash}/token-balances`, 30);
+  if (!data) return [];
+
+  return data
+    .filter((b) => b.token.type === "ERC-20")
+    .map((b) => {
+      const decimals = Number(b.token.decimals ?? 18);
+      return {
+        symbol: b.token.symbol ?? "?",
+        name: b.token.name ?? b.token.symbol ?? "Unknown token",
+        amount: Number(b.value) / 10 ** decimals,
+      };
+    })
+    .filter((t) => t.amount > 0);
 }
 
 /**
