@@ -14,11 +14,11 @@ nothing breaks while these are outstanding.
 | Filename | Used by | Source name in spec |
 |---|---|---|
 | `quarrychain-logo.png` | Global header | `QuarryChain logo.png` |
-| `drmz-icon.png` | DRMZ row + profile | `drmz icon.png` |
-| `hydro-ocean-icon.png` | Hydro Ocean row + profile | `Hydro Ocean Icon.png` |
+| `aloha-blocks-icon.png` | Aloha Blocks row + profile | — |
+| `greymass-icon.png` | Greymass row + profile | — |
 | `carpenter-nft-icon.png` | Carpenter Union row + profile | `Carpenter NFT Icon.png` |
-| `drmz-page.png` | DRMZ profile hero | `DRMZ Page.png` |
-| `hydro-ocean-energy.png` | Hydro Ocean profile hero | `Hydro Ocean Energy.png` |
+| `aloha-blocks-page.png` | Aloha Blocks profile hero | — |
+| `greymass-page.png` | Greymass profile hero | — |
 
 Filenames are lowercase-kebab deliberately — the originals contain spaces and
 inconsistent capitalisation, which is fragile in URLs.

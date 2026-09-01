@@ -10,11 +10,11 @@ import type { WalletSummary } from "@/lib/types";
  * section is populated, exactly as the reference demo's holdings table is.
  */
 
-const [drmz, hydro, carpenter] = MOCK_ACTIVE_VALIDATORS;
+const [alohaBlocks, greymass, carpenter] = MOCK_ACTIVE_VALIDATORS;
 
 const delegations = [
-  { v: drmz, qry: 120_000, rewards: 4_204.5, auto: true },
-  { v: hydro, qry: 60_000, rewards: 1_151.1, auto: false },
+  { v: alohaBlocks, qry: 120_000, rewards: 4_204.5, auto: true },
+  { v: greymass, qry: 60_000, rewards: 1_151.1, auto: false },
   { v: carpenter, qry: 40_000, rewards: 812.4, auto: true },
 ].map(({ v, qry, rewards, auto }) => ({
   validatorId: v.id,
@@ -46,7 +46,7 @@ export const MOCK_WALLET: WalletSummary = {
       id: "e1",
       kind: "received",
       title: "Received 12.40 QRY",
-      detail: "Staking reward from DRMZ",
+      detail: "Staking reward from Aloha Blocks",
       when: "1 minute ago",
     },
     {
@@ -60,7 +60,7 @@ export const MOCK_WALLET: WalletSummary = {
       id: "e3",
       kind: "dividend",
       title: "Epoch reward distributed",
-      detail: "Hydro Ocean Energy · epoch 64",
+      detail: "Greymass · epoch 64",
       when: "Today",
     },
   ],

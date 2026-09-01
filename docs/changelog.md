@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-01 — Featured validator swap: Aloha Blocks / Greymass
+
+Replaced the two placeholder featured validators, DRMZ and Hydro Ocean Energy,
+with real block producers per updated content from the team:
+- **Aloha Blocks** (`id: aloha-blocks`) — block producer since 2018, also
+  builds community research/monitoring tooling. `alohablocks.com`.
+- **Greymass** (`id: greymass`) — long-running block producer with
+  infrastructure, wallet, dev-tool, and open-source ecosystem work.
+  `greymass.com/about`.
+
+Both keep the prior stats (votes, APY, IONOS Frankfurt) and `isLiveNode: true`
+— they're standing in for the same two real block-producing nodes, only the
+identity/copy changed. Updated the matching wallet-dashboard earnings copy
+and the `public/assets/README.md` asset-name table (icon/hero filenames now
+`aloha-blocks-*` / `greymass-*`, awaiting real art).
+
 ## 2026-07-20 — Session 1i: Responsive + accessibility audit
 
 ### Fixed — mobile horizontal overflow
