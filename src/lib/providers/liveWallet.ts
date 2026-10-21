@@ -1,7 +1,6 @@
-import { createPublicClient, formatEther, http, isAddress } from "viem";
-import { CHAIN } from "@/lib/chain";
+import { formatEther, isAddress } from "viem";
 import { getAddressTokenBalances } from "@/lib/explorer/blockscout";
-import { quarryChain } from "@/lib/wallet/chain";
+import { publicClient } from "@/lib/wallet/publicClient";
 import type { WalletProvider } from "@/lib/providers/types";
 import type { TokenBalance, WalletSummary } from "@/lib/types";
 
@@ -26,11 +25,6 @@ import type { TokenBalance, WalletSummary } from "@/lib/types";
  * ZKP Protected" badges the RWA-demo layout shipped with (WalletDashboard.tsx)
  * — there is no real attestation system behind them.
  */
-
-const publicClient = createPublicClient({
-  chain: quarryChain,
-  transport: http(CHAIN.rpcUrl),
-});
 
 function emptySummary(address: string): WalletSummary {
   return {

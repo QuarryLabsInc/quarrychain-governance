@@ -34,7 +34,8 @@ function Assertion({ ok, label }: { ok: boolean; label: string }) {
 export function ConnectionCheck({
   onVerified,
 }: {
-  onVerified: (verified: boolean) => void;
+  /** The endpoint that passed, or null whenever it is not (or no longer) verified. */
+  onVerified: (verifiedUrl: string | null) => void;
 }) {
   const [rpcUrl, setRpcUrl] = useState("");
   const [checking, setChecking] = useState(false);
@@ -45,11 +46,11 @@ export function ConnectionCheck({
   async function runCheck() {
     setChecking(true);
     setResult(null);
-    onVerified(false);
+    onVerified(null);
     try {
       const next = await getProvider().onboarding.checkNodeConnection(rpcUrl);
       setResult(next);
-      onVerified(next.reachable && next.synced && !next.error);
+      onVerified(next.reachable && next.synced && !next.error ? rpcUrl.trim() : null);
     } finally {
       setChecking(false);
     }
@@ -71,7 +72,7 @@ export function ConnectionCheck({
           onChange={(e) => {
             setRpcUrl(e.target.value);
             setResult(null);
-            onVerified(false);
+            onVerified(null);
           }}
           placeholder="http://your-server-ip:8545"
           className="w-full rounded-lg border border-border-strong bg-card px-3 py-2 font-mono text-sm text-ink transition-colors focus:border-brand focus:outline-none"
@@ -89,7 +90,7 @@ export function ConnectionCheck({
         </button>
         {passed && (
           <span className="text-xs font-semibold text-success">
-            ✓ Node is synced and communicating
+            ✓ Connection Verified: Node is Synced and Responding
           </span>
         )}
       </div>

@@ -59,7 +59,23 @@ the provider interface — see [integration.md](integration.md).
       that image name + genesis URL are unconfirmed
 - [x] `[Check Connection]` wired to the real EVM-RPC probe — verified against
       the live testnet, a wrong-chain node, and an unreachable host
-- [x] 500,000 QRY self-bond step + candidacy submission
+- [x] ~~500,000 QRY self-bond step + candidacy submission~~ → replaced by Phase 4c
+
+## Phase 4c — Real onboarding (added 2026-10-13, `onboarding-requirement.txt`)
+- [x] Self-bond floor 10,000 QRY (native, not the bridged ERC-20)
+- [x] Real `createValidator` via the staking precompile, signed by the connected wallet
+- [x] Pre-flight simulation surfaces chain errors before the wallet prompts
+- [x] Balance gate: disabled + "Insufficient QRY balance" under 10,000; failed reads shown as failures
+- [x] Profile & Branding persisted on-chain (Description + socials trailer)
+- [x] `/governance/<0x address>` profile read from chain for onboarded validators
+- [x] Peer ID validated as CometBFT node ID; consensus key validated + checked for reuse
+- [x] Deployment command per host (firewall step), credential helper, 5s RPC timeout
+- [ ] Supabase store (chain = source of truth, Supabase = mirror + logo/peer/RPC/host) — design in `onboarding-requirement.txt`; `submitApplication` still mock
+- [ ] Governance table + validator page read the Supabase mirror, confirm against chain
+- [ ] Faucet URL for the insufficient-balance message
+- [ ] Logo upload (spec'd in the Gemini notes; Step 1 UI was to stay unchanged)
+- [ ] Wire `/miner` to the connected wallet's on-chain validator (still dev harness)
+- [ ] End-to-end test with a funded wallet — blocked on the expired RPC TLS cert
 - [x] Entry points: header CTA + topology onboarding cards
 
 ## Phase 4b — Module C: Validator Personal Dashboard

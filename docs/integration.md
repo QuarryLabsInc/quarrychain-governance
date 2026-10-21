@@ -34,11 +34,30 @@ CometBFT chain that is not how it works. Validators register with a Cosmos
 **`create-validator`** transaction carrying:
 
 - an **ed25519 consensus public key** (the node's, from `tendermint show-validator`)
-- a **self-delegation** of the native QRY staking coin (500,000 QRY minimum)
+- a **self-delegation** of the native QRY staking coin (10,000 QRY minimum, set
+  by the onboarding requirements; the chain's own floor is 1 aqry)
 
-In Phase 1 this is expected to be **permissioned** — which is what the admin
-panel's `[Approve & Authorize]` flow models. Budget for this before building the
-staking path; it is a Cosmos SDK message, not an EVM contract call.
+**Update 2026-10-13 — this is already wired end to end.** The chain exposes
+the Cosmos staking module to the EVM through the **staking precompile** at
+`0x0000000000000000000000000000000000000800` (Evmos v20 ABI). `/onboarding`
+signs `createValidator` there from the operator's MetaMask/Rabby wallet — no
+Cosmos REST, no Keplr. Verified by `eth_call` simulation against the testnet:
+
+| Finding | Detail |
+|---|---|
+| Staking denom | `aqry`, 18 decimals — identical to native EVM QRY |
+| Consensus pubkey | base64 ed25519 string (the `key` of `show-validator`'s JSON) |
+| Sender check | `validatorAddress` must equal `msg.sender` |
+| Duplicate keys | rejected: `validator already exist for this pubkey` |
+| Permissioning | **none on-chain** — a funded wallet registers directly |
+| Readback | `validator(address)` returns Details only as `description`; moniker and website come from the tx calldata |
+
+Because admission is open on-chain, the admin panel's `[Approve & Authorize]`
+flow no longer gates anything real. If Phase 1 must be permissioned, that has
+to happen at the chain level (gov-gated params or an ante handler) — a UI gate
+cannot stop a direct precompile call.
+
+The bonded set today: 5 validators, 100 QRY self-bond each, 5% commission.
 
 ---
 
@@ -112,9 +131,40 @@ image name (`quarrychain/node:latest`) — replace with the real published
 artifact.** Needed: image/binary name, version tag, required ports, genesis URL,
 and seed/persistent-peer strings (`nodeID@ip:26656`) for the existing IONOS nodes.
 
+### `onboarding.registerValidator(req, walletClient)` / `waitForRegistration(tx, addr)`
+→ **Already implemented for real** in `src/lib/providers/liveStaking.ts`.
+Simulates `createValidator` first (so duplicate keys / short balances fail
+with the chain's reason before the wallet prompts), then sends it from the
+connected wallet, waits for the receipt, and reads the validator back.
+
+The Step 1 profile is written into the on-chain `Description`:
+`moniker` ← miner name, `website` ← website, `details` ← description plus a
+socials trailer (`\n\nX: @handle · Discord: discord.gg/…`, parsed by
+`decodeDetails`). Cosmos SDK limits apply: moniker 70, website 140, details 280.
+Commission is fixed at 5% rate / 20% max / 1% max daily change — the last two
+are permanent once created.
+
+### `onboarding.getStakingBalance(addr)` / `findValidatorByConsensusKey(key)`
+→ Real. `eth_getBalance` (native — staking cannot draw from the bridged ERC-20)
+and the precompile's `validators()` across all bond statuses.
+
+### `registry.getOnChain(address)`
+→ Real. Precompile `validator(address)` + the registration tx calldata (by
+hash right after onboarding, otherwise via Blockscout's address tx list).
+Rendered at `/governance/<0x address>`.
+
 ### `onboarding.submitApplication(app)`
-→ Off-chain. Needs a small backend to hold pending candidacies until an admin
-approves them (Phase-1 manual permissioning).
+→ Off-chain, **mock**. Called after the on-chain tx confirms, to store what
+`create-validator` has no field for: Peer ID, RPC endpoint, host. This is the
+seam for the **Supabase** profile store (decided 2026-10-21; full design in
+`onboarding-requirement.txt` → Technical Instructions). The rule: **the chain
+is the source of truth for the profile; Supabase mirrors it and holds what the
+chain can't** (logo, Peer ID, RPC endpoint, host). Browsers never write
+Supabase directly — RLS is public-read only, and Edge Functions verify a
+wallet signature + the tx receipt, then write mirror fields from decoded
+calldata (never from the request body). Status is read from the chain, never
+set by the client. `ValidatorApplication` gained
+`rpcEndpoint`, `validatorAddress`, `txHash` on 2026-10-13 (breaking).
 
 ### `wallet.getSummary(address)`
 → Aggregates the connected wallet's view for the Quarry Wallet Dashboard:
@@ -154,10 +204,14 @@ method server-side** — the UI hiding a button is not authorization.
 
 ## 5. Open questions for the chain team
 
-1. Node artifact — real docker image / binary name + version?
+1. Node artifact — real docker image / binary name + version? The UI now uses
+   the onboarding doc's `quarrychain/node:testnet-latest` + `quarrychaind`,
+   and Cosmos chain-id `quarrychain_1129-1` (the doc's `quarrychain_1234-1`
+   contradicts EVM id 1129) — all three unconfirmed.
 2. `genesis.json` URL + seed / persistent-peer strings for the 2 IONOS nodes?
 3. Can Cosmos REST (`:1317`) + CometBFT RPC (`:26657`) be exposed read-only?
-4. Staking denom (`aqry`? `uqry`?) and `min_self_delegation` param value?
-5. Is `create-validator` open, or gov-gated / permissioned in Phase 1?
-6. Is there a testnet faucet? Operators need 500k QRY to self-bond.
+4. ~~Staking denom~~ — **answered 2026-10-13:** `aqry`, 18 dp.
+5. ~~Is `create-validator` permissioned?~~ — **answered 2026-10-13:** no, it is
+   open on-chain. Decide whether that is intended for Phase 1.
+6. Is there a testnet faucet? Operators need 10,000 native QRY (plus gas) to self-bond. The UI says "Request test tokens from the Faucet" but has no URL to link.
 7. Is there a real Energy/Bandwidth resource module, or is that presentational?

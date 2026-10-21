@@ -100,11 +100,55 @@ export interface ValidatorApplication {
   description: string;
   socials: { x?: string; discord?: string };
   host: ServerHost;
-  /** libp2p / CometBFT node identity. */
+  /** CometBFT node ID — 40 hex chars, from `quarrychaind tendermint show-node-id`. */
   nodePeerId: string;
-  /** ed25519 consensus pubkey used by `create-validator`. */
+  /** ed25519 consensus pubkey used by `create-validator`, base64. */
   consensusPubkey: string;
+  /** The operator's EVM JSON-RPC endpoint that passed the connection check. */
+  rpcEndpoint: string;
   selfBondQry: number;
+  /** Operator wallet = validator address. Null until registered on-chain. */
+  validatorAddress: string | null;
+  /** The confirmed create-validator transaction. Null until registered on-chain. */
+  txHash: string | null;
+}
+
+/** On-chain lifecycle of a validator, from the staking module. */
+export type OnChainBondStatus = "unspecified" | "unbonded" | "unbonding" | "bonded";
+
+/**
+ * A validator read from the chain's staking precompile — unlike `Validator`,
+ * every field here is real. Rendered on /governance/[address] for operators
+ * who registered through /onboarding.
+ */
+export interface OnChainValidator {
+  /** EVM address of the operator; also the route id. */
+  address: string;
+  /** null when the registration tx could not be located (e.g. explorer behind). */
+  name: string | null;
+  website: string | null;
+  description: string;
+  socials: { x?: string; discord?: string };
+  consensusPubkey: string;
+  status: OnChainBondStatus;
+  jailed: boolean;
+  /** Bonded tokens, whole QRY. */
+  bondedQry: number;
+  commissionPct: number;
+  /** The create-validator tx, when found. */
+  registrationTx: string | null;
+}
+
+/** What the wizard sends to the chain to register a validator. */
+export interface CreateValidatorRequest {
+  minerName: string;
+  website: string;
+  description: string;
+  socials: { x?: string; discord?: string };
+  /** base64 ed25519, already normalised by parseConsensusPubkey. */
+  consensusPubkey: string;
+  /** Operator wallet; must be the account that signs. */
+  validatorAddress: `0x${string}`;
 }
 
 export type ProposalVote = "aye" | "nay" | "abstain";

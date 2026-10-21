@@ -8,10 +8,13 @@
  * See docs/integration.md for the endpoint backing each method.
  */
 
+import type { WalletClient } from "viem";
 import type {
+  CreateValidatorRequest,
   Delegation,
   NetworkStatus,
   NodeCheckResult,
+  OnChainValidator,
   Proposal,
   ProposalVote,
   Validator,
@@ -25,6 +28,11 @@ export interface ValidatorRegistryProvider {
   /** Backup miners campaigning for a slot. */
   listCandidates(): Promise<Validator[]>;
   getById(id: string): Promise<Validator | null>;
+  /**
+   * A validator registered on-chain (via /onboarding), read from the staking
+   * precompile. Real in every mode. Null if the address is not a validator.
+   */
+  getOnChain(address: string): Promise<OnChainValidator | null>;
 }
 
 export interface ChainTelemetryProvider {
@@ -45,8 +53,26 @@ export interface OnboardingProvider {
    * has to be proxied server-side. See docs/integration.md.
    */
   checkNodeConnection(rpcUrl: string): Promise<NodeCheckResult>;
-  /** Submit a candidacy for Phase-1 manual approval by QuarryLabs. */
+  /**
+   * Record the off-chain half of a registration (peer ID, RPC endpoint, host)
+   * that has no field in create-validator. Called after the on-chain tx
+   * confirms. Mock today; this is where a profile store (e.g. Supabase) plugs in.
+   */
   submitApplication(application: ValidatorApplication): Promise<{ id: string }>;
+  /** Native QRY (aqry) balance — what self-bond draws from. Throws on RPC failure. */
+  getStakingBalance(address: `0x${string}`): Promise<bigint>;
+  /** Operator address already using this consensus key, else null. */
+  findValidatorByConsensusKey(pubkey: string): Promise<string | null>;
+  /**
+   * REAL: simulate, then sign create-validator via the staking precompile from
+   * the operator's wallet. Bonds MIN_SELF_BOND_QRY. Throws with the chain's reason.
+   */
+  registerValidator(
+    request: CreateValidatorRequest,
+    wallet: WalletClient,
+  ): Promise<{ txHash: `0x${string}` }>;
+  /** Wait for the tx receipt and confirm the validator exists on-chain. */
+  waitForRegistration(txHash: `0x${string}`, address: `0x${string}`): Promise<OnChainValidator>;
   /** The exact shell command an operator runs to bring a node up. */
   buildNodeCommand(host: ValidatorApplication["host"]): string;
 }

@@ -42,8 +42,12 @@ Sibling repos: `quarrychain-ico` (token sale — handed off), `quarrychain-web`
 ### Chain facts (verified 2026-07-20)
 - Cosmos-SDK + **CometBFT** consensus + EVM module. EVM chain-id **1129**.
 - Validators register via Cosmos `create-validator` (ed25519 consensus pubkey +
-  native QRY self-delegation of 500,000). **Not** an ERC-20 registry contract,
-  despite the spec's wording.
+  native QRY self-delegation of **10,000**, per the 2026-10-13 onboarding
+  requirements). **Not** an ERC-20 registry contract, despite the spec's wording.
+- The browser sends it through the **staking precompile** at `0x…0800`
+  (Evmos v20 ABI, `src/lib/staking.ts`). Staking denom is `aqry` (18 dp,
+  same as native EVM QRY). `create-validator` is **not permissioned on-chain**
+  (verified 2026-10-13 by simulation).
 - Public: EVM JSON-RPC + Blockscout. Not public: Cosmos REST, CometBFT RPC.
 
 ### Design
