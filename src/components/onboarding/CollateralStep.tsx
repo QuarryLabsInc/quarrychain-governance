@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BaseError, UserRejectedRequestError } from "viem";
 import { useAccount, useSwitchChain, useWalletClient } from "wagmi";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { CHAIN, MIN_SELF_BOND_QRY } from "@/lib/chain";
@@ -13,7 +14,7 @@ import {
   describeStakingError,
   encodeDetails,
 } from "@/lib/staking";
-import type { OnChainValidator, ServerHost } from "@/lib/types";
+import type { OnChainValidator, ServerHost, ValidatorApplication } from "@/lib/types";
 
 /**
  * Step 3 — Collateral Lockup & Staking Activation.
@@ -47,7 +48,25 @@ type Phase =
   | { kind: "idle" }
   | { kind: "signing" }
   | { kind: "confirming"; txHash: `0x${string}` }
+  | { kind: "publishing"; txHash: `0x${string}` }
   | { kind: "failed"; message: string; txHash?: `0x${string}` };
+
+export interface RegistrationResult {
+  validator: OnChainValidator;
+  txHash: `0x${string}`;
+  /** Why the off-chain profile didn't save; null when it did. */
+  publishError: string | null;
+  /** Ask for a fresh signature and try saving the profile again. */
+  retryPublish: () => Promise<string | null>;
+}
+
+function describePublishError(err: unknown): string {
+  if (err instanceof BaseError && err.walk((e) => e instanceof UserRejectedRequestError)) {
+    return "You declined the signature, so your Peer ID, RPC endpoint, and host weren't saved.";
+  }
+  const reason = err instanceof Error ? err.message : "Unknown error";
+  return `Saving your Peer ID, RPC endpoint, and host failed: ${reason}`;
+}
 
 export function CollateralStep({
   input,
@@ -56,11 +75,7 @@ export function CollateralStep({
 }: {
   input: RegistrationInput;
   onBack: () => void;
-  onRegistered: (result: {
-    validator: OnChainValidator;
-    txHash: `0x${string}`;
-    recordWarning: string | null;
-  }) => void;
+  onRegistered: (result: RegistrationResult) => void;
 }) {
   const provider = getProvider();
   const { address, isConnected, chainId } = useAccount();
@@ -108,7 +123,7 @@ export function CollateralStep({
   const wrongChain = isConnected && chainId !== CHAIN.id;
   const currentBalance = ready ? balance : ({ state: "loading" } as Balance);
   const sufficient = currentBalance.state === "ok" && currentBalance.wei >= SELF_BOND_WEI;
-  const busy = phase.kind === "signing" || phase.kind === "confirming";
+  const busy = phase.kind === "signing" || phase.kind === "confirming" || phase.kind === "publishing";
 
   const canExecute =
     ready &&
@@ -138,29 +153,33 @@ export function CollateralStep({
       setPhase({ kind: "confirming", txHash });
       const validator = await provider.onboarding.waitForRegistration(txHash, address);
 
-      // The on-chain registration is done; the off-chain record (peer ID, RPC,
-      // host) is best-effort and must not mask that success if it fails.
-      let recordWarning: string | null = null;
-      try {
-        await provider.onboarding.submitApplication({
-          minerName: input.minerName,
-          website: input.website,
-          description: input.description,
-          socials: input.socials,
-          host: input.host,
-          nodePeerId: input.peerId,
-          consensusPubkey: input.consensusPubkey,
-          rpcEndpoint: input.rpcEndpoint,
-          selfBondQry: MIN_SELF_BOND_QRY,
-          validatorAddress: address,
-          txHash,
-        });
-      } catch {
-        recordWarning =
-          "Your validator is registered on-chain, but saving your Peer ID and RPC endpoint failed.";
-      }
+      // The on-chain registration is done. Publishing the off-chain half
+      // (peer ID, RPC, host) to the profile store is a separate signature —
+      // if it fails or is declined, the validator still exists; the success
+      // screen offers a retry.
+      setPhase({ kind: "publishing", txHash });
+      const application: ValidatorApplication = {
+        minerName: input.minerName,
+        website: input.website,
+        description: input.description,
+        socials: input.socials,
+        host: input.host,
+        nodePeerId: input.peerId,
+        consensusPubkey: input.consensusPubkey,
+        rpcEndpoint: input.rpcEndpoint,
+        selfBondQry: MIN_SELF_BOND_QRY,
+        validatorAddress: address,
+        txHash,
+      };
+      const wallet = walletClient;
+      const publish = () =>
+        provider.onboarding.submitApplication(application, wallet).then(
+          () => null,
+          (err: unknown) => describePublishError(err),
+        );
+      const publishError = await publish();
 
-      onRegistered({ validator, txHash, recordWarning });
+      onRegistered({ validator, txHash, publishError, retryPublish: publish });
     } catch (err) {
       setPhase({ kind: "failed", message: describeStakingError(err), txHash });
     }
@@ -290,6 +309,14 @@ export function CollateralStep({
         </p>
       )}
 
+      {phase.kind === "publishing" && (
+        <p aria-live="polite" className="rounded-lg border border-success/30 bg-success-tint px-3 py-2 text-xs font-medium text-success-deep">
+          ✓ Validator registered on-chain. One more step: sign a message in your
+          wallet to publish your Peer ID, RPC endpoint, and host to your profile.
+          This is a signature, not a transaction — it costs no gas.
+        </p>
+      )}
+
       <div className="flex gap-3">
         <button
           type="button"
@@ -309,7 +336,9 @@ export function CollateralStep({
             ? "Confirm in your wallet…"
             : phase.kind === "confirming"
               ? "Activating validator…"
-              : "Execute Bond Deposit & Activate Validator"}
+              : phase.kind === "publishing"
+                ? "Sign to publish your profile…"
+                : "Execute Bond Deposit & Activate Validator"}
         </button>
       </div>
     </div>

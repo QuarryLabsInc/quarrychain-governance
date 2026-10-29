@@ -70,12 +70,15 @@ the provider interface — see [integration.md](integration.md).
 - [x] `/governance/<0x address>` profile read from chain for onboarded validators
 - [x] Peer ID validated as CometBFT node ID; consensus key validated + checked for reuse
 - [x] Deployment command per host (firewall step), credential helper, 5s RPC timeout
-- [ ] Supabase store (chain = source of truth, Supabase = mirror + logo/peer/RPC/host) — design in `onboarding-requirement.txt`; `submitApplication` still mock
-- [ ] Governance table + validator page read the Supabase mirror, confirm against chain
+- [x] Supabase store (chain = source of truth) — backend repo `quarrychain-governance-backend`, table + RLS + `register-profile` deployed
+- [x] `submitApplication` signs + calls `register-profile`; retry on the success screen
+- [x] `/governance` "Registered On-Chain" list from the mirror; profile page merges logo/host, chain wins
+- [ ] `upload-logo`, `update-offchain`, `sync-validators` Edge Functions
+- [ ] Hide `rpc_endpoint` / `node_peer_id` from anon reads (column-level grants)
 - [ ] Faucet URL for the insufficient-balance message
 - [ ] Logo upload (spec'd in the Gemini notes; Step 1 UI was to stay unchanged)
 - [ ] Wire `/miner` to the connected wallet's on-chain validator (still dev harness)
-- [ ] End-to-end test with a funded wallet — blocked on the expired RPC TLS cert
+- [ ] End-to-end test with a funded wallet (RPC cert renewed 2026-10-21 — unblocked)
 - [x] Entry points: header CTA + topology onboarding cards
 
 ## Phase 4b — Module C: Validator Personal Dashboard

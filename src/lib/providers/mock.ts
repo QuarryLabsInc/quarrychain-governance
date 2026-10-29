@@ -13,6 +13,7 @@ import {
   waitForRegistration,
 } from "@/lib/providers/liveStaking";
 import { checkNodeConnection } from "@/lib/providers/node-check";
+import { listProfiles, registerProfile } from "@/lib/providers/profileStore";
 import type { DataProvider } from "@/lib/providers/types";
 import type {
   Proposal,
@@ -119,6 +120,7 @@ export function createMockProvider(): DataProvider {
         ),
       // Real read, even in mock mode — validators who onboarded are on-chain.
       getOnChain: (address) => getOnChainValidator(address),
+      listRegistered: listProfiles,
     },
 
     telemetry: {
@@ -147,8 +149,8 @@ export function createMockProvider(): DataProvider {
       findValidatorByConsensusKey,
       registerValidator,
       waitForRegistration,
-      submitApplication: (application: ValidatorApplication) =>
-        latency({ id: `app_${application.minerName.toLowerCase().replace(/\s+/g, "_")}` }, 600),
+      // Real, like the rest of onboarding: the Supabase profile store.
+      submitApplication: registerProfile,
       /*
        * Bring-up command, per the onboarding spec's template. Ports are right
        * for a CometBFT + EVM node; the image tag and Cosmos chain-id are NOT

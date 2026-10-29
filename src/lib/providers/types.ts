@@ -16,6 +16,7 @@ import type {
   NodeCheckResult,
   OnChainValidator,
   Proposal,
+  StoredProfile,
   ProposalVote,
   Validator,
   ValidatorApplication,
@@ -33,6 +34,12 @@ export interface ValidatorRegistryProvider {
    * precompile. Real in every mode. Null if the address is not a validator.
    */
   getOnChain(address: string): Promise<OnChainValidator | null>;
+  /**
+   * Validators registered via /onboarding, from the Supabase profile store —
+   * a mirror; confirm against getOnChain before treating as authoritative.
+   * Throws if the store is unreachable.
+   */
+  listRegistered(): Promise<StoredProfile[]>;
 }
 
 export interface ChainTelemetryProvider {
@@ -54,11 +61,16 @@ export interface OnboardingProvider {
    */
   checkNodeConnection(rpcUrl: string): Promise<NodeCheckResult>;
   /**
-   * Record the off-chain half of a registration (peer ID, RPC endpoint, host)
-   * that has no field in create-validator. Called after the on-chain tx
-   * confirms. Mock today; this is where a profile store (e.g. Supabase) plugs in.
+   * REAL: publish the off-chain half of a registration (peer ID, RPC
+   * endpoint, host) to the Supabase profile store. Asks `wallet` to sign the
+   * register message (no gas), then calls the `register-profile` Edge
+   * Function, which verifies the signature and the on-chain tx. Requires
+   * `validatorAddress` + `txHash`, i.e. call it after waitForRegistration.
    */
-  submitApplication(application: ValidatorApplication): Promise<{ id: string }>;
+  submitApplication(
+    application: ValidatorApplication,
+    wallet: WalletClient,
+  ): Promise<{ id: string }>;
   /** Native QRY (aqry) balance — what self-bond draws from. Throws on RPC failure. */
   getStakingBalance(address: `0x${string}`): Promise<bigint>;
   /** Operator address already using this consensus key, else null. */

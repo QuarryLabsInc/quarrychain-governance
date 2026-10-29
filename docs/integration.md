@@ -153,18 +153,35 @@ and the precompile's `validators()` across all bond statuses.
 hash right after onboarding, otherwise via Blockscout's address tx list).
 Rendered at `/governance/<0x address>`.
 
-### `onboarding.submitApplication(app)`
-→ Off-chain, **mock**. Called after the on-chain tx confirms, to store what
-`create-validator` has no field for: Peer ID, RPC endpoint, host. This is the
-seam for the **Supabase** profile store (decided 2026-10-21; full design in
-`onboarding-requirement.txt` → Technical Instructions). The rule: **the chain
-is the source of truth for the profile; Supabase mirrors it and holds what the
-chain can't** (logo, Peer ID, RPC endpoint, host). Browsers never write
-Supabase directly — RLS is public-read only, and Edge Functions verify a
-wallet signature + the tx receipt, then write mirror fields from decoded
-calldata (never from the request body). Status is read from the chain, never
-set by the client. `ValidatorApplication` gained
-`rpcEndpoint`, `validatorAddress`, `txHash` on 2026-10-13 (breaking).
+### `onboarding.submitApplication(app, walletClient)`
+→ **Real** (2026-10-21), `src/lib/providers/profileStore.ts`. Called after
+`waitForRegistration`. Asks the wallet to sign the register message
+(`src/lib/profileMessage.ts` — must match the backend's
+`_shared/message.ts` byte for byte; verified against the live function), then
+POSTs to the `register-profile` Edge Function in
+`quarrychain-governance-backend`. That function re-derives every chain-known
+field itself and only takes Peer ID / RPC endpoint / host from the request.
+Retries 404s (function's RPC a block behind). A failure here never undoes the
+registration — the success screen offers "Sign & retry".
+
+Design rule (2026-10-21): **the chain is the source of truth for the profile;
+Supabase mirrors it and holds what the chain can't** (logo, Peer ID, RPC
+endpoint, host). Browsers never write Supabase directly — RLS is public-read
+only. Full design: `onboarding-requirement.txt` → Technical Instructions.
+
+### `registry.listRegistered()`
+→ **Real.** Supabase `validator_profiles`, public columns only (never
+`node_peer_id` / `rpc_endpoint`). A mirror: status/stake may lag the chain;
+rendered on `/governance` with a "synced" age, each row linking to the
+chain-checked profile page. Throws if the store is unreachable.
+
+Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+(browser-safe; read-only). Logos load only from the
+`validator-logos` bucket path (`next.config.ts` `remotePatterns`).
+
+Contract changes 2026-10-21 (breaking): `submitApplication` takes a
+`WalletClient`; new `registry.listRegistered()`; new `StoredProfile` type;
+`OnChainValidator` gained `logoUrl` and `host`.
 
 ### `wallet.getSummary(address)`
 → Aggregates the connected wallet's view for the Quarry Wallet Dashboard:

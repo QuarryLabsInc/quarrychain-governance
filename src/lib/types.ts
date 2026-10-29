@@ -137,6 +137,31 @@ export interface OnChainValidator {
   commissionPct: number;
   /** The create-validator tx, when found. */
   registrationTx: string | null;
+  /** Off-chain, from the Supabase profile store; null if no row / store down. */
+  logoUrl: string | null;
+  host: ServerHost | null;
+}
+
+/**
+ * A row of the Supabase profile store (quarrychain-governance-backend).
+ * A MIRROR of the chain for fast lists — status/stake may lag the chain until
+ * the next sync; anything shown as authoritative must be confirmed on-chain.
+ * Deliberately excludes peer ID and RPC endpoint: the UI never renders them.
+ */
+export interface StoredProfile {
+  address: string;
+  name: string | null;
+  website: string | null;
+  description: string | null;
+  socials: { x?: string; discord?: string };
+  /** Mirrors the table's CHECK constraint; null when the chain reported "unspecified". */
+  status: "bonded" | "unbonding" | "unbonded" | "jailed" | null;
+  bondedQry: number | null;
+  logoUrl: string | null;
+  host: ServerHost | null;
+  registrationTx: string | null;
+  /** When the backend last copied this row from the chain. */
+  syncedAt: string | null;
 }
 
 /** What the wizard sends to the chain to register a validator. */

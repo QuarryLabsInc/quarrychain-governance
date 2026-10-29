@@ -22,6 +22,12 @@ const STATUS_LABEL: Record<OnChainValidator["status"], { text: string; tone: "ok
   unspecified: { text: "Unknown status", tone: "warn" },
 };
 
+const HOST_LABEL: Record<NonNullable<OnChainValidator["host"]>, string> = {
+  AWS: "AWS",
+  IONOS: "IONOS",
+  BareMetal: "Bare metal",
+};
+
 const TONE = {
   ok: "bg-success-tint text-success-deep",
   warn: "bg-warning-tint text-warning",
@@ -71,7 +77,7 @@ export function OnChainValidatorProfile({ validator: v }: { validator: OnChainVa
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex min-w-0 items-start gap-4">
-            <ValidatorIcon name={name} asset={null} size={56} />
+            <ValidatorIcon name={name} asset={v.logoUrl} size={56} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="break-words text-2xl font-bold text-heading">{name}</h1>
@@ -133,6 +139,7 @@ export function OnChainValidatorProfile({ validator: v }: { validator: OnChainVa
             <Stat label="Bonded stake" value={formatQry(v.bondedQry)} />
             <Stat label="Commission" value={`${v.commissionPct.toFixed(2)}%`} />
             <Stat label="Jailed" value={v.jailed ? "Yes" : "No"} />
+            {v.host && <Stat label="Infrastructure" value={HOST_LABEL[v.host]} />}
             <Stat label="Consensus key" value={shortenHash(v.consensusPubkey)} title={v.consensusPubkey} />
             {v.registrationTx && (
               <div className="flex items-baseline justify-between gap-4 py-2.5">

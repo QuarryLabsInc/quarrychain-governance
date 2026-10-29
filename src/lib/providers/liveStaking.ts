@@ -5,6 +5,7 @@ import {
   type WalletClient,
 } from "viem";
 import { getAddressCallsTo } from "@/lib/explorer/blockscout";
+import { getProfile } from "@/lib/providers/profileStore";
 import {
   COMMISSION,
   MIN_SELF_DELEGATION_WEI,
@@ -168,12 +169,19 @@ export async function getOnChainValidator(
   if (!v) return null;
 
   const { description, socials } = decodeDetails(v.description);
-  const { name, website, tx } = await recoverDescription(address, knownTx);
+  // Chain first. The Supabase mirror only fills what the chain read couldn't
+  // (name/website when the explorer can't find the tx) and adds what the
+  // chain has no field for (logo, host). Its name/website were themselves
+  // decoded from calldata by the backend, so they're chain-derived too.
+  const [recovered, stored] = await Promise.all([
+    recoverDescription(address, knownTx),
+    getProfile(address),
+  ]);
 
   return {
     address: v.operatorAddress,
-    name,
-    website,
+    name: recovered.name ?? stored?.name ?? null,
+    website: recovered.website ?? stored?.website ?? null,
     description,
     socials,
     consensusPubkey: v.consensusPubkey,
@@ -181,6 +189,8 @@ export async function getOnChainValidator(
     jailed: v.jailed,
     bondedQry: Number(formatEther(v.tokens)),
     commissionPct: Number(formatEther(v.commission)) * 100,
-    registrationTx: tx,
+    registrationTx: recovered.tx ?? stored?.registrationTx ?? null,
+    logoUrl: stored?.logoUrl ?? null,
+    host: stored?.host ?? null,
   };
 }

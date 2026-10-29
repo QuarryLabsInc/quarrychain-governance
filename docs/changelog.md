@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-10-21 — Portal ↔ Supabase profile store
+
+### Built
+- `src/lib/providers/profileStore.ts` — reads `validator_profiles` (public
+  columns only) and publishes profiles via the `register-profile` Edge
+  Function after a signed message. `src/lib/profileMessage.ts` mirrors the
+  backend's message builder.
+- `CollateralStep`: after the create-validator receipt, a "publishing" phase
+  asks for a gas-free signature. Declined/failed → the success screen says the
+  validator is still registered and offers "Sign & retry".
+- `/governance`: "Registered On-Chain" table (Supabase mirror, with synced
+  age; distinct "store unreachable" vs "none yet" states).
+- Validator page: logo + host from the store; chain still wins on everything
+  it knows. `ValidatorIcon` accepts bucket URLs; `next.config.ts` allows only
+  the `validator-logos` public path.
+
+### Verified
+Typecheck/lint. Message parity against the deployed function: a signature
+from the frontend builder passes (404 on a made-up tx); one trailing newline
+of drift → 401. Not yet verified: a full registration with a funded wallet.
+
+### Found
+- `rpc_endpoint` and `node_peer_id` are readable by anyone through the REST API
+  (the table is public-read). The UI never selects them, but that isn't
+  protection. Needs column-level grants in a backend migration.
+
 ## 2026-10-21 — Decision: Supabase + on-chain, chain is source of truth
 
 Supersedes the 2026-10-13 "No Supabase" decision below. Profile fields stay

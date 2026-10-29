@@ -23,6 +23,9 @@ import { useState } from "react";
  *
  * Brand assets have not been delivered yet — drop files into public/assets
  * (see the README there) and they light up with no code change.
+ *
+ * `asset` is either a filename under /public/assets or an absolute https URL
+ * (validator logos from the Supabase bucket — allowed in next.config.ts).
  */
 
 function initialsFor(name: string): string {
@@ -61,7 +64,7 @@ export function ValidatorIcon({
 
       {asset && !failed && (
         <Image
-          src={`/assets/${asset}`}
+          src={/^https:\/\//.test(asset) ? asset : `/assets/${asset}`}
           alt=""
           width={size}
           height={size}

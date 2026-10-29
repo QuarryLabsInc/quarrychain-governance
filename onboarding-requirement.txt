@@ -115,9 +115,18 @@ Edge Functions
                      validators with none (e.g. genesis validators). Keeps the mirror honest
                      after editValidator txs, jailing, slashing.
 
-Signed message format (EIP-191 personal_sign):
-  "QuarryChain validator profile\naddress: <0x...>\naction: <register|update|logo>\ntx: <hash or ->\nissued: <ISO time>"
-  Reject if issued is more than 10 minutes old (replay protection).
+Signed message format (EIP-191 personal_sign) — every field written from the request
+is inside the message, so a captured signature can't be replayed with other values.
+register-profile signs exactly (lines joined with \n, address/tx lowercase):
+  QuarryChain validator profile
+  action: register
+  address: <0x...>
+  tx: <hash>
+  peer: <node id>
+  rpc: <endpoint>
+  host: <AWS|IONOS|BareMetal>
+  issued: <ISO time>
+  Reject if issued is more than 10 minutes old or more than 1 minute in the future.
 
 Reads (portal)
   - Governance table: list from Supabase (fast), with logos.
@@ -131,9 +140,9 @@ Profile edits after registration
   Logo / peer ID / RPC / host: signed update-offchain call.
 
 Repo boundary
-  This repo stays frontend-only (AGENTS.md). The portal reads Supabase with the anon key and calls
-  the Edge Functions through the DataProvider seam (onboarding.submitApplication). Migrations and
-  Edge Functions live in a separate repo or a supabase/ project owned by the backend dev.
+  This repo stays frontend-only (AGENTS.md). The portal reads Supabase with the publishable key and
+  calls the Edge Functions through the DataProvider seam (onboarding.submitApplication).
+  Migrations and Edge Functions live in quarrychain-governance-backend (QuarryLabsInc on GitHub).
 
 
 
@@ -206,7 +215,7 @@ Deployment Verification Checklist
   and with a body whose name differs from the on-chain name -> rejected / chain value wins.
   RPC ping: the testnet RPC is https://rpc.testnet.quarrychain.network (not rpc.quarrychain.network,
   which doesn't respond). Then http://10.255.255.1:8545 must time out and keep Step 3 locked.
-  NOTE: the testnet RPC's TLS certificate expired 2026-09-13 — browsers reject it until renewed.
+  (The RPC and explorer TLS certificates were renewed 2026-10-21, valid to 2027-01-19.)
   Balance: a wallet under 10,000 QRY keeps the button disabled; a funded wallet gets the wallet
   prompt, the tx confirms, the validator appears at /governance/<address>, and the Supabase row
   matches the chain.

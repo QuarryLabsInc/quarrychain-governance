@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CollateralStep } from "@/components/onboarding/CollateralStep";
+import { CollateralStep, type RegistrationResult } from "@/components/onboarding/CollateralStep";
 import { ConnectionCheck } from "@/components/onboarding/ConnectionCheck";
 import { NodeCommandBlock } from "@/components/onboarding/NodeCommandBlock";
 import { MIN_SELF_BOND_QRY } from "@/lib/chain";
@@ -14,7 +14,7 @@ import {
   parseConsensusPubkey,
   parsePeerId,
 } from "@/lib/staking";
-import type { OnChainValidator, ServerHost } from "@/lib/types";
+import type { ServerHost } from "@/lib/types";
 
 /**
  * Module C — the "Become a Quarry Miner" onboarding wizard.
@@ -56,11 +56,7 @@ export function OnboardingWizard() {
   const [verifiedRpc, setVerifiedRpc] = useState<string | null>(null);
 
   // Step 3
-  const [registered, setRegistered] = useState<{
-    validator: OnChainValidator;
-    txHash: `0x${string}`;
-    recordWarning: string | null;
-  } | null>(null);
+  const [registered, setRegistered] = useState<RegistrationResult | null>(null);
 
   const provider = getProvider();
   const command = provider.onboarding.buildNodeCommand(host);
@@ -103,11 +99,10 @@ export function OnboardingWizard() {
             {shortenHash(registered.txHash)}
           </Link>
         </p>
-        {registered.recordWarning && (
-          <p className="mt-3 rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-[11px] font-medium text-warning">
-            {registered.recordWarning}
-          </p>
-        )}
+        <PublishNotice
+          initialError={registered.publishError}
+          retry={registered.retryPublish}
+        />
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href={`/governance/${v.address}`}
@@ -412,6 +407,46 @@ function Field({
           {error ?? hint}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Outcome of publishing the off-chain profile after registration. Failure is
+ * a warning, not an error: the validator already exists on-chain.
+ */
+function PublishNotice({
+  initialError,
+  retry,
+}: {
+  initialError: string | null;
+  retry: () => Promise<string | null>;
+}) {
+  const [error, setError] = useState(initialError);
+  const [busy, setBusy] = useState(false);
+
+  if (!error) {
+    return (
+      <p className="mt-3 text-[11px] text-success-deep">
+        ✓ Profile published — Peer ID, RPC endpoint, and host saved.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 space-y-2 rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-[11px] font-medium text-warning">
+      <p>Your validator is registered on-chain. {error}</p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(await retry());
+          setBusy(false);
+        }}
+        className="rounded-lg border border-warning/40 bg-card px-3 py-1 font-bold text-warning transition-colors hover:bg-surface disabled:opacity-50"
+      >
+        {busy ? "Waiting for signature…" : "Sign & retry"}
+      </button>
     </div>
   );
 }
