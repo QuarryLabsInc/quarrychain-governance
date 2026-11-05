@@ -156,7 +156,7 @@ export function createMockProvider(): DataProvider {
        * for a CometBFT + EVM node; the image tag and Cosmos chain-id are NOT
        * confirmed by the chain team (integration.md, open questions 1-2), and
        * the UI says so next to the block. The spec's `quarrychain_1234-1` was
-       * replaced: Evmos-style chain-ids embed the EVM id, which is 1129.
+       * replaced: Evmos-style chain-ids embed the EVM id, which is 13133.
        *
        * No inline comments after a trailing `\` — that ends the line
        * continuation and breaks the command when pasted.
@@ -185,7 +185,7 @@ export function createMockProvider(): DataProvider {
           "  -p 26656:26656 -p 8545:8545 -p 127.0.0.1:26657:26657 \\",
           "  -v ~/.quarrychain:/root/.quarrychain \\",
           "  quarrychain/node:testnet-latest \\",
-          `  quarrychaind start --chain-id=quarrychain_${CHAIN.id}-1`,
+          `  quarrychaind start --chain-id=${CHAIN.cosmosChainId}`,
         ].join("\n");
       },
     },

@@ -168,11 +168,11 @@ export async function getOnChainValidator(
   const v = await readValidator(address);
   if (!v) return null;
 
-  const { description, socials } = decodeDetails(v.description);
-  // Chain first. The Supabase mirror only fills what the chain read couldn't
-  // (name/website when the explorer can't find the tx) and adds what the
-  // chain has no field for (logo, host). Its name/website were themselves
-  // decoded from calldata by the backend, so they're chain-derived too.
+  const { description, socials } = decodeDetails(v.description.details);
+  // Chain first: Cosmos EVM returns moniker and website directly. Calldata
+  // recovery still supplies the registration tx; the Supabase mirror only
+  // fills what the chain has no field for (logo, host), or a name/website if
+  // the read came back empty.
   const [recovered, stored] = await Promise.all([
     recoverDescription(address, knownTx),
     getProfile(address),
@@ -180,8 +180,8 @@ export async function getOnChainValidator(
 
   return {
     address: v.operatorAddress,
-    name: recovered.name ?? stored?.name ?? null,
-    website: recovered.website ?? stored?.website ?? null,
+    name: v.description.moniker || recovered.name || stored?.name || null,
+    website: v.description.website || recovered.website || stored?.website || null,
     description,
     socials,
     consensusPubkey: v.consensusPubkey,

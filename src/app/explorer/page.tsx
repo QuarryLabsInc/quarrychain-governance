@@ -21,7 +21,7 @@ import { formatNumber, formatWei, shortenAddress, shortenHash, timeAgo } from "@
 export const metadata: Metadata = {
   title: "Explorer — QuarryChain",
   description:
-    "Blocks, transactions, and addresses on the QuarryChain testnet (chain 1129).",
+    "Blocks, transactions, and addresses on the QuarryChain testnet (chain 13133).",
 };
 
 export const revalidate = 10;

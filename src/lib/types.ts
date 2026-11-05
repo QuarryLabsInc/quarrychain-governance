@@ -100,7 +100,7 @@ export interface ValidatorApplication {
   description: string;
   socials: { x?: string; discord?: string };
   host: ServerHost;
-  /** CometBFT node ID — 40 hex chars, from `quarrychaind tendermint show-node-id`. */
+  /** CometBFT node ID — 40 hex chars, from `quarrychaind comet show-node-id`. */
   nodePeerId: string;
   /** ed25519 consensus pubkey used by `create-validator`, base64. */
   consensusPubkey: string;

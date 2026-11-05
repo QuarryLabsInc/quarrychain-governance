@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-11-05 — Restarted testnet (chain 13133, Cosmos EVM)
+
+### Changed
+- `CHAIN.id` 1129 → **13133**, new `CHAIN.cosmosChainId = "quarrychain_13133-1"`,
+  block time 3.6 s → 3.2 s. Same RPC and explorer URLs (both now serve the new chain).
+- Staking precompile ABI → Cosmos EVM v0.7.3: `Validator.description` is the
+  `Description` struct, not a string. With the old ABI every `validator()` /
+  `validators()` read failed to decode on the new chain. `createValidator` /
+  `editValidator` are unchanged.
+- Validator profile: moniker and website now come straight from the chain
+  (`description.moniker` / `.website`); calldata recovery and the Supabase
+  mirror are fallbacks.
+- Operator commands: `quarrychaind tendermint …` → `quarrychaind comet …`
+  (SDK v0.54 rename).
+
+### Verified
+Typecheck, lint, production build. Against the live chain: `validators()`
+decodes all 7 genesis validators (quarrylabs-1…7), `validator()` returns
+quarrylabs-1 bonded with 1,000,000 QRY at 5%. `src/lib/types.ts` shapes are
+unchanged (comment only), so no integrator break.
+
 ## 2026-10-21 — Portal ↔ Supabase profile store
 
 ### Built

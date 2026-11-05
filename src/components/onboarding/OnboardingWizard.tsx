@@ -258,11 +258,11 @@ export function OnboardingWizard() {
                 <ul className="mt-1 space-y-0.5">
                   <li>
                     • Peer ID:{" "}
-                    <code className="font-mono">quarrychaind tendermint show-node-id</code>
+                    <code className="font-mono">quarrychaind comet show-node-id</code>
                   </li>
                   <li>
                     • Consensus PubKey:{" "}
-                    <code className="font-mono">quarrychaind tendermint show-validator</code>
+                    <code className="font-mono">quarrychaind comet show-validator</code>
                   </li>
                 </ul>
               </div>

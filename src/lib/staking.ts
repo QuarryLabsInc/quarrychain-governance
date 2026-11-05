@@ -23,9 +23,11 @@ import { MIN_SELF_BOND_QRY } from "@/lib/chain";
  *   - create-validator is NOT permissioned on-chain: a funded wallet registers
  *     directly, there is no QuarryLabs approval gate at the protocol level
  *
- * The ABI matches Evmos v20, where `validator()` returns `description` as the
- * Details string only — moniker and website are not readable back from the
- * precompile and must be recovered from the registration tx calldata.
+ * The ABI matches Cosmos EVM v0.7.3 (`precompiles/staking/StakingI.sol`):
+ * `validator()` returns the full `Description` struct (moniker, website,
+ * details…), and `status` is the BondStatus enum (decoded as uint8). The old
+ * Evmos v20 chain returned `description` as the details string only, so that
+ * ABI fails to decode on this chain (verified in the 2026-11-02 rehearsal).
  */
 
 export const STAKING_PRECOMPILE = "0x0000000000000000000000000000000000000800" as const;
@@ -33,7 +35,7 @@ export const STAKING_PRECOMPILE = "0x0000000000000000000000000000000000000800" a
 export const stakingAbi = parseAbi([
   "struct Description { string moniker; string identity; string website; string securityContact; string details; }",
   "struct CommissionRates { uint256 rate; uint256 maxRate; uint256 maxChangeRate; }",
-  "struct Validator { string operatorAddress; string consensusPubkey; bool jailed; uint8 status; uint256 tokens; uint256 delegatorShares; string description; int64 unbondingHeight; int64 unbondingTime; uint256 commission; uint256 minSelfDelegation; }",
+  "struct Validator { string operatorAddress; string consensusPubkey; bool jailed; uint8 status; uint256 tokens; uint256 delegatorShares; Description description; int64 unbondingHeight; int64 unbondingTime; uint256 commission; uint256 minSelfDelegation; }",
   "struct PageRequest { bytes key; uint64 offset; uint64 limit; bool countTotal; bool reverse; }",
   "struct PageResponse { bytes nextKey; uint64 total; }",
   "function createValidator(Description description, CommissionRates commissionRates, uint256 minSelfDelegation, address validatorAddress, string pubkey, uint256 value) returns (bool success)",
@@ -82,7 +84,7 @@ export const bondStatusFromId = (id: number): BondStatus => STATUS_BY_ID[id] ?? 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
- * CometBFT node ID: 40 hex chars (`quarrychaind tendermint show-node-id`).
+ * CometBFT node ID: 40 hex chars (`quarrychaind comet show-node-id`).
  * Also accepts the full `id@host:port` peer string and keeps the id.
  *
  * Rejects libp2p "12D3KooW…" IDs explicitly — the spec's example format is
@@ -95,7 +97,7 @@ export function parsePeerId(raw: string): Parsed<string> {
     return {
       ok: false,
       error:
-        "That's a libp2p peer ID. QuarryChain runs CometBFT, whose node IDs are 40 hex characters — run `quarrychaind tendermint show-node-id`.",
+        "That's a libp2p peer ID. QuarryChain runs CometBFT, whose node IDs are 40 hex characters — run `quarrychaind comet show-node-id`.",
     };
   }
   const id = input.split("@")[0].toLowerCase();
@@ -124,7 +126,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 /**
  * ed25519 consensus pubkey, normalised to the base64 form the precompile
  * takes. Accepts, in order of how operators will most likely paste it:
- *   - the JSON `quarrychaind tendermint show-validator` prints
+ *   - the JSON `quarrychaind comet show-validator` prints
  *     {"@type":"/cosmos.crypto.ed25519.PubKey","key":"<base64>"}
  *   - the bare base64 key
  *   - 64-char hex (from priv_validator_key.json tooling)
@@ -153,7 +155,7 @@ export function parseConsensusPubkey(raw: string): Parsed<string> {
     return {
       ok: false,
       error:
-        "Legacy bech32 keys aren't accepted. Paste the JSON output of `quarrychaind tendermint show-validator` instead.",
+        "Legacy bech32 keys aren't accepted. Paste the JSON output of `quarrychaind comet show-validator` instead.",
     };
   }
 

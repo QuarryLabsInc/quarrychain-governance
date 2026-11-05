@@ -1,9 +1,10 @@
 /**
  * QuarryChain testnet constants.
  *
- * Determined by interrogating the live testnet (2026-07-20):
- *   - Cosmos-SDK chain, CometBFT consensus, EVM module (Evmos / Cosmos-EVM lineage)
- *   - EVM chain-id 1129 (0x469), ~3.6s blocks
+ * Restarted testnet (2026-11-05): Cosmos EVM v0.7.3 (`quarrychaind`), Cosmos
+ * chain-id `quarrychain_13133-1`, EVM chain-id 13133 (0x334d), ~3.2s blocks.
+ * (The first testnet, an Evmos v20 fork on EVM chain-id 1129, is retired.)
+ *   - Cosmos-SDK chain, CometBFT consensus, EVM module
  *   - Public: EVM JSON-RPC + Blockscout. NOT public: Cosmos REST (:1317), CometBFT RPC (:26657)
  *
  * Validators are CometBFT validators: they register via a Cosmos `create-validator`
@@ -13,8 +14,10 @@
  */
 
 export const CHAIN = {
-  /** EVM chain id. Verified via eth_chainId => 0x469. */
-  id: 1129,
+  /** EVM chain id. Verified via eth_chainId => 0x334d. */
+  id: 13133,
+  /** Cosmos chain id (gentx, `quarrychaind start --chain-id`). */
+  cosmosChainId: "quarrychain_13133-1",
   name: "QuarryChain Testnet",
   nativeCurrency: { name: "Quarry", symbol: "QRY", decimals: 18 },
   rpcUrl: "https://rpc.testnet.quarrychain.network",
@@ -22,7 +25,7 @@ export const CHAIN = {
   wsUrl: "wss://rpc.testnet.quarrychain.network/ws",
   explorerUrl: "https://explorer.testnet.quarrychain.network",
   /** Observed average block time in ms. Drives the telemetry ticker cadence. */
-  blockTimeMs: 3600,
+  blockTimeMs: 3200,
 } as const;
 
 /**
