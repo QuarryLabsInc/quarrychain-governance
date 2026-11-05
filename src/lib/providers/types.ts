@@ -8,11 +8,15 @@
  * See docs/integration.md for the endpoint backing each method.
  */
 
+import type { WalletClient } from "viem";
 import type {
+  CreateValidatorRequest,
   Delegation,
   NetworkStatus,
   NodeCheckResult,
+  OnChainValidator,
   Proposal,
+  StoredProfile,
   ProposalVote,
   Validator,
   ValidatorApplication,
@@ -25,6 +29,17 @@ export interface ValidatorRegistryProvider {
   /** Backup miners campaigning for a slot. */
   listCandidates(): Promise<Validator[]>;
   getById(id: string): Promise<Validator | null>;
+  /**
+   * A validator registered on-chain (via /onboarding), read from the staking
+   * precompile. Real in every mode. Null if the address is not a validator.
+   */
+  getOnChain(address: string): Promise<OnChainValidator | null>;
+  /**
+   * Validators registered via /onboarding, from the Supabase profile store —
+   * a mirror; confirm against getOnChain before treating as authoritative.
+   * Throws if the store is unreachable.
+   */
+  listRegistered(): Promise<StoredProfile[]>;
 }
 
 export interface ChainTelemetryProvider {
@@ -45,8 +60,31 @@ export interface OnboardingProvider {
    * has to be proxied server-side. See docs/integration.md.
    */
   checkNodeConnection(rpcUrl: string): Promise<NodeCheckResult>;
-  /** Submit a candidacy for Phase-1 manual approval by QuarryLabs. */
-  submitApplication(application: ValidatorApplication): Promise<{ id: string }>;
+  /**
+   * REAL: publish the off-chain half of a registration (peer ID, RPC
+   * endpoint, host) to the Supabase profile store. Asks `wallet` to sign the
+   * register message (no gas), then calls the `register-profile` Edge
+   * Function, which verifies the signature and the on-chain tx. Requires
+   * `validatorAddress` + `txHash`, i.e. call it after waitForRegistration.
+   */
+  submitApplication(
+    application: ValidatorApplication,
+    wallet: WalletClient,
+  ): Promise<{ id: string }>;
+  /** Native QRY (aqry) balance — what self-bond draws from. Throws on RPC failure. */
+  getStakingBalance(address: `0x${string}`): Promise<bigint>;
+  /** Operator address already using this consensus key, else null. */
+  findValidatorByConsensusKey(pubkey: string): Promise<string | null>;
+  /**
+   * REAL: simulate, then sign create-validator via the staking precompile from
+   * the operator's wallet. Bonds MIN_SELF_BOND_QRY. Throws with the chain's reason.
+   */
+  registerValidator(
+    request: CreateValidatorRequest,
+    wallet: WalletClient,
+  ): Promise<{ txHash: `0x${string}` }>;
+  /** Wait for the tx receipt and confirm the validator exists on-chain. */
+  waitForRegistration(txHash: `0x${string}`, address: `0x${string}`): Promise<OnChainValidator>;
   /** The exact shell command an operator runs to bring a node up. */
   buildNodeCommand(host: ValidatorApplication["host"]): string;
 }

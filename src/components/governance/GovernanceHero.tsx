@@ -47,7 +47,7 @@ export function GovernanceHero() {
           </h1>
           <p className="mt-2 max-w-md text-sm text-panel-ink/70">
             Freeze QRY to vote for the Quarry Miners who produce blocks — or
-            stake 500,000 QRY and campaign for a seat of your own.
+            stake 10,000 QRY and campaign for a seat of your own.
           </p>
 
           <div className="mt-5 flex flex-wrap gap-3">

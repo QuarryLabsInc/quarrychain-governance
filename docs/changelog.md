@@ -1,5 +1,104 @@
 # Changelog
 
+## 2026-10-21 — Portal ↔ Supabase profile store
+
+### Built
+- `src/lib/providers/profileStore.ts` — reads `validator_profiles` (public
+  columns only) and publishes profiles via the `register-profile` Edge
+  Function after a signed message. `src/lib/profileMessage.ts` mirrors the
+  backend's message builder.
+- `CollateralStep`: after the create-validator receipt, a "publishing" phase
+  asks for a gas-free signature. Declined/failed → the success screen says the
+  validator is still registered and offers "Sign & retry".
+- `/governance`: "Registered On-Chain" table (Supabase mirror, with synced
+  age; distinct "store unreachable" vs "none yet" states).
+- Validator page: logo + host from the store; chain still wins on everything
+  it knows. `ValidatorIcon` accepts bucket URLs; `next.config.ts` allows only
+  the `validator-logos` public path.
+
+### Verified
+Typecheck/lint. Message parity against the deployed function: a signature
+from the frontend builder passes (404 on a made-up tx); one trailing newline
+of drift → 401. Not yet verified: a full registration with a funded wallet.
+
+### Found
+- `rpc_endpoint` and `node_peer_id` are readable by anyone through the REST API
+  (the table is public-read). The UI never selects them, but that isn't
+  protection. Needs column-level grants in a backend migration.
+
+## 2026-10-21 — Decision: Supabase + on-chain, chain is source of truth
+
+Supersedes the 2026-10-13 "No Supabase" decision below. Profile fields stay
+on-chain in the validator's Description (signed, authoritative); Supabase
+`validator_profiles` mirrors them for fast listing and adds the fields the
+chain has no place for — logo, Peer ID, RPC endpoint, host. Conflicts resolve
+to the chain. The original objection (public writes keyed by wallet address)
+is addressed by design: public-read RLS, all writes through Edge Functions
+that verify an EIP-191 signature and the create-validator receipt, mirror
+fields taken from decoded calldata only, status read from the chain, and a
+5-minute resync job. Rewrote the Technical Instructions in
+`onboarding-requirement.txt` accordingly (also folding in the Peer ID / key
+format, native-QRY, precompile-call and chain-id corrections). Supabase code
+itself lives outside this repo; the portal reaches it through the
+`submitApplication` seam. No code changed.
+
+## 2026-10-13 — Real validator onboarding (`/onboarding`)
+
+Implemented `onboarding-requirement.txt`. Step 1's UI is unchanged; steps 2-3
+now do real work against the chain.
+
+### Discovered — the chain already supports browser registration
+The testnet exposes the Cosmos staking module through the **staking precompile**
+(`0x…0800`, Evmos v20 ABI). Probed by `eth_call` simulation: denom is `aqry`
+(18 dp), pubkeys are base64 ed25519, duplicates are rejected, and
+**create-validator is not permissioned on-chain**. That answers integration
+open questions 4 and 5, and means the admin "Approve & Authorize" step no
+longer gates anything real.
+
+### Built
+- `src/lib/staking.ts` — precompile ABI, commission terms, Peer ID / consensus
+  key parsers, on-chain Description encoding (socials ride in `details`),
+  chain-error humaniser.
+- `src/lib/providers/liveStaking.ts` — balance, duplicate-key lookup,
+  simulate-then-sign `createValidator`, receipt wait + readback, on-chain
+  validator read (precompile + registration calldata).
+- `CollateralStep.tsx` — wallet connect / network switch, balance vs 10,000 QRY,
+  "Execute Bond Deposit & Activate Validator", confirmation states.
+- `OnChainValidatorProfile.tsx` + `/governance/[id]` now resolve 0x addresses.
+  Shows only real fields; no uptime/APY and no mock Vote/Delegate CTA.
+
+### Decisions — where the Gemini technical notes were overridden
+- **No Supabase.** Profile goes on-chain in the validator's `Description`,
+  which is signed by the operator and readable by anyone. Repo rules forbid a
+  DB here, and the proposed table (public writes keyed by wallet address) would
+  let anyone overwrite anyone's profile. Peer ID / RPC endpoint still go through
+  the mock `submitApplication` seam, where a signature-verified store can plug in.
+- **Peer ID is a CometBFT node ID** (40 hex), not libp2p `12D3K…`.
+  **Consensus key is base64 / show-validator JSON**, not bech32 `…valconspub1…`.
+- **Native QRY, not "QRY-QRC20"** — staking draws from the bank balance.
+- **No `createValidatorCandidate(peerId, pubkey, rpc, value)`** — no such
+  contract exists; the precompile's `createValidator` is the real call.
+- **Chain-id `quarrychain_1129-1`**, not `quarrychain_1234-1` (still unconfirmed).
+- **Success screen, not a redirect to `/miner`** — that dashboard is still the
+  dev harness with mock data; landing a real operator there would show them
+  someone else's numbers. It links to the real validator page instead.
+- On-chain `minSelfDelegation` is 1 aqry, not 10,000 QRY: it can only ever be
+  raised and jails the validator if crossed, too rigid for a "for now" number.
+
+### Fixed along the way
+- The old deployment command had `# comments` after line-continuation `\`,
+  which broke it when pasted.
+- Shared `publicClient` extracted to `src/lib/wallet/publicClient.ts`.
+
+### Verified
+Typecheck, lint, build clean. Parsers + Description round-trip: 17/17 cases.
+Against the live chain: `validators()` paging, duplicate-key detection,
+simulation errors ("insufficient funds", "already exist for this pubkey"),
+`/governance/0x8f0F…` renders the real bonded validator, a non-validator
+address 404s. **Not verified:** an actual signed registration — needs a wallet
+with 10,000 QRY, and browsers currently refuse the RPC (TLS cert expired
+2026-09-13), which also blocks the node check's network-tip comparison.
+
 ## 2026-09-01 — Featured validator swap: Aloha Blocks / Greymass
 
 Replaced the two placeholder featured validators, DRMZ and Hydro Ocean Energy,

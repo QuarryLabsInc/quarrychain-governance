@@ -223,6 +223,33 @@ export async function getAddressTokenBalances(hash: string): Promise<TokenBalanc
 }
 
 /**
+ * Successful txs an address sent to `to`, oldest first, with raw calldata.
+ * Used to recover a validator's moniker/website from its create-validator
+ * call — the staking precompile does not return them (see src/lib/staking.ts).
+ * Returns null when Blockscout is unreachable, so callers can tell "no such
+ * tx" apart from "couldn't look".
+ */
+export async function getAddressCallsTo(
+  hash: string,
+  to: string,
+): Promise<{ hash: string; input: string }[] | null> {
+  const data = await api<{
+    items: { hash: string; raw_input?: string; result?: string; status?: string; to: { hash: string } | null }[];
+  }>(`/addresses/${hash}/transactions?filter=from`, 30);
+  if (!data?.items) return null;
+
+  return data.items
+    .filter(
+      (t) =>
+        t.to?.hash.toLowerCase() === to.toLowerCase() &&
+        (t.result ?? t.status ?? "").toLowerCase() === "success" &&
+        t.raw_input,
+    )
+    .map((t) => ({ hash: t.hash, input: t.raw_input! }))
+    .reverse();
+}
+
+/**
  * Resolve a query to an in-app explorer route.
  *
  * Handles the obvious shapes locally (block height, 0x-hash, address) before

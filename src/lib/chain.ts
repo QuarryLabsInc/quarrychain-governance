@@ -25,8 +25,12 @@ export const CHAIN = {
   blockTimeMs: 3600,
 } as const;
 
-/** Minimum self-bond to enter the active set, per the Phase 6 tokenomics note. */
-export const MIN_SELF_BOND_QRY = 500_000;
+/**
+ * Minimum self-bond to register as a validator — 10,000 QRY "for now", per
+ * the onboarding requirements (2026-10-13; was 500,000 in the Phase 6 note).
+ * Native QRY, not the bridged ERC-20: staking draws from the aqry bank balance.
+ */
+export const MIN_SELF_BOND_QRY = 10_000;
 
 /** Size of the active consensus set. */
 export const ACTIVE_SET_SIZE = 21;

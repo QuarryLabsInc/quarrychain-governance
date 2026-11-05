@@ -18,12 +18,15 @@ import type { NodeCheckResult } from "@/lib/types";
 /** How far behind the network tip we still consider "synced". */
 const SYNC_TOLERANCE_BLOCKS = 10;
 
+/** Per-call timeout, per the onboarding spec. */
+const RPC_TIMEOUT_MS = 5000;
+
 async function rpc<T>(url: string, method: string, params: unknown[] = []): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
@@ -107,7 +110,7 @@ export async function checkNodeConnection(rpcUrl: string): Promise<NodeCheckResu
     const message = err instanceof Error ? err.message : "Unknown error";
     return {
       ...empty,
-      error: `Could not reach ${trimmed}: ${message}. If the node is running, it may be blocking browser-origin (CORS) requests.`,
+      error: `Unable to reach RPC (${message}). Check that port 8545 is open and CORS is enabled.`,
     };
   }
 }

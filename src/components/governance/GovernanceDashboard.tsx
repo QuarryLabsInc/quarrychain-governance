@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { GovernanceHero } from "@/components/governance/GovernanceHero";
 import { GovernanceTransition } from "@/components/governance/GovernanceTransition";
 import { NetworkTopology } from "@/components/governance/NetworkTopology";
@@ -16,11 +17,14 @@ export function GovernanceDashboard({
   initialValidators,
   status,
   liveProposerCount,
+  registered,
 }: {
   initialValidators: Validator[];
   status: NetworkStatus;
   /** Real distinct proposers from the chain; null if the indexer was unreachable. */
   liveProposerCount: number | null;
+  /** Server-rendered list of validators registered on-chain via /onboarding. */
+  registered?: ReactNode;
 }) {
   const { validators, height, flashId } = useNodeTelemetry(
     initialValidators,
@@ -41,6 +45,7 @@ export function GovernanceDashboard({
         height={height}
         flashId={flashId}
       />
+      {registered}
       <GovernanceTransition />
     </>
   );

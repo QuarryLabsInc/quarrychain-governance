@@ -1,0 +1,222 @@
+Become a Miner Portal Page Instructions:
+
+1. Profile & Branding:
+
+    Keep this section the exact same, no need to change anything here. Make sure all the information is saved on their Validator Page.
+
+
+2. Connect Config 
+
+    Server Host:
+
+    AWS Server Cluster
+    IONOS Cloud Stack
+    Custom Bare Metal Host
+
+    Node Deployment Command:
+
+
+    Node Peer ID:
+
+
+    Consensus Public Key:
+
+
+    Your Node’s JSON-RPC Endpoint:
+
+
+
+
+3. QRY Staking (Collateral Lockup)
+
+    View the design via Supabase / Github (should be able to view what it looks like when granted the ability to move to the third step)
+    10,000 QRY is the Minimum Requirement (for now) to get started as a Validator 
+    Will be linked to QRY Wallet as shown on Dashboard 
+
+
+
+
+
+
+Technical Instructions (revised 2026-10-21 — replaces the Gemini draft; verified against the live testnet)
+
+Data architecture: chain is the source of truth, Supabase is the index + off-chain store
+
+Two stores, one rule: if the chain and Supabase disagree, the chain wins.
+
+  On-chain (validator's Cosmos Description, signed by the operator's wallet) — AUTHORITATIVE
+    miner name (moniker), website, description + X/Discord (details field)
+    status (bonded / unbonded / jailed), bonded stake, commission, consensus key
+
+  Supabase — a MIRROR of the on-chain fields (for fast lists/search) PLUS fields the chain has no place for
+    mirror:     miner_name, website_url, description, social_x, social_discord,
+                consensus_pubkey, onchain_status, bonded_qry, registration_tx
+    off-chain:  logo_url, node_peer_id, rpc_endpoint, server_host
+
+Why: the on-chain record is signed by the operator and can't be forged or silently
+edited, but the chain can't hold a logo or the operator's infra details, and listing
+every validator's profile straight from the chain is slow. Supabase can be wiped and
+rebuilt from the chain at any time — except logo / peer ID / RPC / host, which live
+only there.
+
+Security rules (non-negotiable)
+  - Browsers never write to Supabase directly. Table and bucket are public-READ only (RLS);
+    all writes go through Edge Functions using the service role.
+  - Mirror fields are written ONLY from chain data (decoded tx calldata / staking precompile),
+    never from the request body. Off-chain fields are accepted only with a wallet signature
+    (EIP-191) from the validator's own address, verified server-side.
+  - Status is never set by the client. It is read from the chain (there is no
+    'REGISTERED_CANDIDATE' flag a browser can flip).
+  Without these, anyone could overwrite anyone's profile — the table is keyed by a public
+  wallet address.
+
+-- Supabase Schema: validator_profiles
+CREATE TABLE validator_profiles (
+  wallet_address   VARCHAR(42) PRIMARY KEY,          -- 0x..., lowercase
+  -- mirror of chain (sync-written only)
+  miner_name       VARCHAR(70),                      -- Cosmos moniker limit
+  website_url      VARCHAR(140),
+  description      TEXT,                             -- details minus socials trailer
+  social_x         TEXT,
+  social_discord   TEXT,
+  consensus_pubkey TEXT,
+  onchain_status   TEXT CHECK (onchain_status IN ('bonded','unbonding','unbonded','jailed')),
+  bonded_qry       NUMERIC,
+  registration_tx  VARCHAR(66),
+  chain_synced_at  TIMESTAMPTZ,
+  -- off-chain only (signed operator writes)
+  logo_url         TEXT,
+  node_peer_id     CHAR(40),                         -- CometBFT node ID
+  rpc_endpoint     TEXT,
+  server_host      TEXT CHECK (server_host IN ('AWS','IONOS','BareMetal')),
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE validator_profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public read" ON validator_profiles FOR SELECT USING (true);
+-- no insert/update/delete policies: only Edge Functions (service role) write.
+
+Storage: public bucket validator-logos, public read; objects at validator-logos/<wallet_address>.<ext>,
+written only by the upload-logo function. PNG/JPEG/WebP, max 1 MB.
+
+Edge Functions
+  register-profile   called by the portal after the create-validator tx confirms.
+                     Input: txHash, peerId, rpcEndpoint, host, signature.
+                     1. Recover signer from the signature; it must equal the tx sender.
+                     2. Fetch the receipt from the RPC: status success, to = 0x…0800, from = signer.
+                     3. Decode the createValidator calldata -> write mirror fields from it.
+                     4. Read validator(address) from the precompile -> write status / stake.
+                     5. Write off-chain fields from the request.
+                     Idempotent: re-running with the same tx gives the same row.
+  upload-logo        signed by the validator address; stores the image, sets logo_url.
+  update-offchain    signed; edits peer ID / RPC endpoint / host / logo later (dashboard).
+  sync-validators    scheduled (pg_cron, every 5 min): page the precompile's validators()
+                     for all statuses, upsert status / stake / details; create rows for
+                     validators with none (e.g. genesis validators). Keeps the mirror honest
+                     after editValidator txs, jailing, slashing.
+
+Signed message format (EIP-191 personal_sign) — every field written from the request
+is inside the message, so a captured signature can't be replayed with other values.
+register-profile signs exactly (lines joined with \n, address/tx lowercase):
+  QuarryChain validator profile
+  action: register
+  address: <0x...>
+  tx: <hash>
+  peer: <node id>
+  rpc: <endpoint>
+  host: <AWS|IONOS|BareMetal>
+  issued: <ISO time>
+  Reject if issued is more than 10 minutes old or more than 1 minute in the future.
+
+Reads (portal)
+  - Governance table: list from Supabase (fast), with logos.
+  - Validator page /governance/<address>: render Supabase row, then confirm against the chain
+    (precompile validator(address)); where they differ, show the chain value and trigger a resync.
+  - If Supabase is down, the page still renders from the chain (no logo / infra details).
+
+Profile edits after registration
+  Name / website / description / socials: send an editValidator tx on-chain FIRST; the sync job
+  (or an immediate resync call) updates Supabase. Never edit these in Supabase directly.
+  Logo / peer ID / RPC / host: signed update-offchain call.
+
+Repo boundary
+  This repo stays frontend-only (AGENTS.md). The portal reads Supabase with the publishable key and
+  calls the Edge Functions through the DataProvider seam (onboarding.submitApplication).
+  Migrations and Edge Functions live in quarrychain-governance-backend (QuarryLabsInc on GitHub).
+
+
+
+Step 1: Profile & Branding
+User Interface: unchanged. Nothing is persisted at this step — the data isn't trustworthy until the
+operator signs it on-chain in Step 3. (Optional: keep a local draft in the browser.)
+Field limits (Cosmos SDK): name 70, website 140, description + socials 280 combined.
+Logo upload: not in the current UI. If added, it uploads after registration via upload-logo
+(needs the validator's signature), not before.
+
+Step 2: Infrastructure Connection Config
+1. Server Host Selector: AWS Server Cluster / IONOS Cloud Stack / Custom Bare Metal Host.
+2. Node Deployment Command: copyable, changes per host (firewall step differs):
+   docker run -d --name quarrychain-node \
+     -p 26656:26656 -p 8545:8545 -p 127.0.0.1:26657:26657 \
+     -v ~/.quarrychain:/root/.quarrychain \
+     quarrychain/node:testnet-latest \
+     quarrychaind start --chain-id=quarrychain_1129-1
+   NEEDS CONFIRMATION from the chain team: image name, binary name, Cosmos chain-id, genesis URL,
+   seed peers. (The draft's quarrychain_1234-1 doesn't match EVM chain-id 1129.)
+   Helper text: Peer ID: quarrychaind tendermint show-node-id
+                Consensus PubKey: quarrychaind tendermint show-validator
+3. Required Input Fields
+   Node Peer ID: CometBFT node ID — exactly 40 hex characters. (Not the libp2p "12D3K..." format;
+   CometBFT never produces that.) Also accepts id@host:port and keeps the id.
+   Consensus Public Key: ed25519 — the JSON printed by show-validator, the bare base64 key, or hex.
+   (Not bech32 "...valconspub1..."; current SDKs don't print it and the chain doesn't accept it.)
+   Checked against the live validator set: a key already in use is rejected here.
+   Your Node's JSON-RPC Endpoint: e.g. http://198.51.100.24:8545
+4. Check Connection
+   POST eth_chainId + eth_blockNumber to the endpoint, 5000 ms timeout.
+   Pass: chain-id 1129 AND within 10 blocks of the public testnet tip ->
+     "✓ Connection Verified: Node is Synced and Responding."
+   Fail: "✗ Unable to reach RPC. Check that port 8545 is open and CORS is enabled."
+   [Continue to Collateral Lockup] stays disabled until it passes.
+
+Step 3: Collateral Lockup & Staking Activation
+Minimum self-bond: 10,000 QRY — NATIVE QRY (the chain's staking denom, aqry). The bridged QRC-20
+token cannot be staked.
+Wallet: same RainbowKit wallet as the Wallet Dashboard; prompts a switch to chain 1129 if needed.
+Balance check:
+   Below 10,000: button disabled, "Insufficient QRY balance. Request test tokens from the Faucet."
+   Otherwise show: Required Self-Bond: 10,000 QRY / Your Connected Balance: XX,XXX QRY
+   (Faucet URL still needed.)
+Execution: [Execute Bond Deposit & Activate Validator] calls the staking precompile at
+0x0000000000000000000000000000000000000800 (there is no createValidatorCandidate contract):
+   createValidator(
+     { moniker, identity: "", website, securityContact: "", details },   // details = description + socials
+     { rate: 5%, maxRate: 20%, maxChangeRate: 1% },                       // max values are permanent
+     minSelfDelegation: 1,
+     validatorAddress: <connected wallet>,                                 // must be the signer
+     pubkey: <base64 consensus key>,
+     value: 10,000 QRY in aqry
+   )
+   The call is simulated first, so errors like a reused key or a short balance show before the wallet opens.
+Post-transaction (receipt.status === success):
+   1. Read the validator back from the chain to confirm it exists and get its status.
+   2. Call register-profile (signed) to populate Supabase.
+      If that fails, the registration still stands — show a warning and allow retry.
+   3. Show the success screen with the real on-chain status badge, linking to /governance/<address>.
+      (Redirect to /miner once that dashboard reads the connected wallet; today it shows sample data.)
+NOTE: create-validator is NOT permissioned on-chain — any funded wallet becomes a validator
+directly. If Phase 1 requires QuarryLabs approval, that must be enforced at the chain level.
+
+
+Deployment Verification Checklist
+  Supabase: validator_profiles has the columns above; RLS on; anon key cannot insert/update
+  (try it — it must fail). Bucket validator-logos is public-read, not public-write.
+  Tampering test: call register-profile with a txHash that isn't yours, or a forged signature,
+  and with a body whose name differs from the on-chain name -> rejected / chain value wins.
+  RPC ping: the testnet RPC is https://rpc.testnet.quarrychain.network (not rpc.quarrychain.network,
+  which doesn't respond). Then http://10.255.255.1:8545 must time out and keep Step 3 locked.
+  (The RPC and explorer TLS certificates were renewed 2026-10-21, valid to 2027-01-19.)
+  Balance: a wallet under 10,000 QRY keeps the button disabled; a funded wallet gets the wallet
+  prompt, the tx confirms, the validator appears at /governance/<address>, and the Supabase row
+  matches the chain.
+  Resync: change the description with an editValidator tx; within 5 minutes Supabase matches.

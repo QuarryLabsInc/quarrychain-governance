@@ -1,26 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { CollateralStep, type RegistrationResult } from "@/components/onboarding/CollateralStep";
 import { ConnectionCheck } from "@/components/onboarding/ConnectionCheck";
 import { NodeCommandBlock } from "@/components/onboarding/NodeCommandBlock";
 import { MIN_SELF_BOND_QRY } from "@/lib/chain";
-import { formatQry } from "@/lib/format";
+import { formatQry, shortenAddress, shortenHash } from "@/lib/format";
 import { getProvider } from "@/lib/providers";
+import {
+  DESCRIPTION_LIMITS,
+  describeStakingError,
+  parseConsensusPubkey,
+  parsePeerId,
+} from "@/lib/staking";
 import type { ServerHost } from "@/lib/types";
 
 /**
  * Module C — the "Become a Quarry Miner" onboarding wizard.
  *
  *   1. Profile & Branding
- *   2. Infrastructure Connection Config  (real RPC verification)
- *   3. Collateral Lockup
+ *   2. Infrastructure Connection Config  (real RPC + consensus-key checks)
+ *   3. Collateral Lockup                 (real create-validator tx)
  *
  * Registration on this chain is a Cosmos `create-validator` message carrying an
  * ed25519 consensus pubkey plus a native self-delegation — NOT an ERC-20
- * registry contract, despite the spec's wording. Step 3 collects what that
- * message needs and submits the candidacy for Phase-1 manual approval.
- * See docs/integration.md.
+ * registry contract, despite the spec's wording. Step 3 sends it from the
+ * operator's wallet through the staking precompile (src/lib/staking.ts). The
+ * Step 1 profile is written into the validator's on-chain Description, which
+ * is what /governance/[address] reads back. See docs/integration.md.
  */
 
 const HOSTS: { value: ServerHost; label: string }[] = [
@@ -45,63 +53,70 @@ export function OnboardingWizard() {
   const [host, setHost] = useState<ServerHost>("IONOS");
   const [peerId, setPeerId] = useState("");
   const [consensusKey, setConsensusKey] = useState("");
-  const [nodeVerified, setNodeVerified] = useState(false);
+  const [verifiedRpc, setVerifiedRpc] = useState<string | null>(null);
 
   // Step 3
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [registered, setRegistered] = useState<RegistrationResult | null>(null);
 
   const provider = getProvider();
   const command = provider.onboarding.buildNodeCommand(host);
 
+  const peer = parsePeerId(peerId);
+  const key = parseConsensusPubkey(consensusKey);
+  const keyStatus = useConsensusKeyStatus(key.ok ? key.value : null);
+
   const step1Complete = minerName.trim().length > 0;
   const step2Complete =
-    nodeVerified && peerId.trim().length > 0 && consensusKey.trim().length > 0;
+    verifiedRpc !== null && peer.ok && key.ok && keyStatus.state === "free";
 
-  async function handleSubmit() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const { id } = await provider.onboarding.submitApplication({
-        minerName,
-        website,
-        description,
-        socials: { x: xHandle || undefined, discord: discord || undefined },
-        host,
-        nodePeerId: peerId,
-        consensusPubkey: consensusKey,
-        selfBondQry: MIN_SELF_BOND_QRY,
-      });
-      setSubmitted(id);
-    } catch {
-      setError("Could not submit your candidacy. Try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (submitted) {
+  if (registered) {
+    const v = registered.validator;
+    const bonded = v.status === "bonded";
     return (
       <div className="mx-auto max-w-xl animate-fade-in rounded-xl border border-success/30 bg-card p-8 text-center shadow-sm">
         <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success-tint text-xl text-success-deep">
           ✓
         </span>
-        <h1 className="text-xl font-bold text-heading">Candidacy submitted</h1>
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-          <strong className="text-heading">{minerName}</strong> has been submitted
-          for QuarryLabs review. During Phase 1, validator admission is manually
-          permissioned — you&apos;ll enter the candidate set once approved.
+        <h1 className="text-xl font-bold text-heading">Validator registered on-chain</h1>
+        <span
+          className={`mt-3 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+            bonded ? "bg-success-tint text-success-deep" : "bg-warning-tint text-warning"
+          }`}
+        >
+          {bonded ? "Active — Bonded" : "Registered — Outside Active Set"}
+        </span>
+        <p className="mx-auto mt-3 max-w-md text-sm text-muted">
+          <strong className="text-heading">{minerName}</strong> bonded{" "}
+          {formatQry(MIN_SELF_BOND_QRY)} from{" "}
+          <span className="font-mono">{shortenAddress(v.address)}</span>.
+          {bonded
+            ? " Your node is in the consensus set and should start signing blocks."
+            : " You'll enter the consensus set once your stake ranks high enough."}
         </p>
         <p className="mt-4 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] text-body">
-          Reference: {submitted}
+          Tx:{" "}
+          <Link href={`/explorer/tx/${registered.txHash}`} className="hover:text-brand">
+            {shortenHash(registered.txHash)}
+          </Link>
         </p>
-        <Link
-          href="/miner"
-          className="mt-6 inline-block rounded-lg bg-brand px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-hover"
-        >
-          Go to your node dashboard
-        </Link>
+        <PublishNotice
+          initialError={registered.publishError}
+          retry={registered.retryPublish}
+        />
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Link
+            href={`/governance/${v.address}`}
+            className="rounded-lg bg-brand px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-hover"
+          >
+            View your validator page
+          </Link>
+          <Link
+            href="/miner"
+            className="rounded-lg border border-border-strong bg-card px-5 py-2.5 text-sm font-bold text-body transition-colors hover:bg-surface"
+          >
+            Go to your node dashboard
+          </Link>
+        </div>
       </div>
     );
   }
@@ -139,15 +154,6 @@ export function OnboardingWizard() {
           ))}
         </ol>
 
-        {error && (
-          <p
-            role="alert"
-            className="mb-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-medium text-danger"
-          >
-            {error}
-          </p>
-        )}
-
         {/* Step 1 — Profile & Branding */}
         {step === 1 && (
           <div className="animate-fade-in space-y-4">
@@ -158,6 +164,7 @@ export function OnboardingWizard() {
               onChange={setMinerName}
               placeholder="e.g., Global Mining Group"
               required
+              maxLength={DESCRIPTION_LIMITS.moniker}
             />
             <Field
               id="miner-website"
@@ -165,6 +172,7 @@ export function OnboardingWizard() {
               value={website}
               onChange={setWebsite}
               placeholder="https://yournode.io"
+              maxLength={DESCRIPTION_LIMITS.website}
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
@@ -193,6 +201,7 @@ export function OnboardingWizard() {
                 id="miner-description"
                 rows={3}
                 value={description}
+                maxLength={DESCRIPTION_LIMITS.details}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Who you are and how you run your infrastructure. Shown on your public miner profile."
                 className="w-full rounded-lg border border-border-strong bg-card px-3 py-2 text-sm text-ink transition-colors focus:border-brand focus:outline-none"
@@ -244,6 +253,19 @@ export function OnboardingWizard() {
                 Node Deployment Command
               </span>
               <NodeCommandBlock command={command} />
+              <div className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-body">
+                <p className="font-semibold">To find your credentials on your server run:</p>
+                <ul className="mt-1 space-y-0.5">
+                  <li>
+                    • Peer ID:{" "}
+                    <code className="font-mono">quarrychaind tendermint show-node-id</code>
+                  </li>
+                  <li>
+                    • Consensus PubKey:{" "}
+                    <code className="font-mono">quarrychaind tendermint show-validator</code>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <Field
@@ -251,20 +273,37 @@ export function OnboardingWizard() {
               label="Node Peer ID"
               value={peerId}
               onChange={setPeerId}
-              placeholder="12D3KooW…"
+              placeholder="40-character hex node ID"
               mono
+              error={peerId.trim() && !peer.ok ? peer.error : null}
             />
             <Field
               id="consensus-key"
               label="Consensus Public Key (ed25519)"
               value={consensusKey}
               onChange={setConsensusKey}
-              placeholder="quarryvalconspub1… — from `tendermint show-validator`"
+              placeholder='{"@type":"/cosmos.crypto.ed25519.PubKey","key":"…"}'
               mono
+              error={
+                consensusKey.trim() && !key.ok
+                  ? key.error
+                  : keyStatus.state === "taken"
+                    ? `This key is already registered by validator ${shortenAddress(keyStatus.by)}. Each node needs its own consensus key.`
+                    : keyStatus.state === "error"
+                      ? `Could not check the key against the chain: ${keyStatus.message}`
+                      : null
+              }
+              hint={
+                keyStatus.state === "checking"
+                  ? "Checking key against the validator set…"
+                  : keyStatus.state === "free"
+                    ? "✓ Valid ed25519 key, not yet registered"
+                    : null
+              }
             />
 
             <div className="rounded-lg border border-border bg-surface p-4">
-              <ConnectionCheck onVerified={setNodeVerified} />
+              <ConnectionCheck onVerified={setVerifiedRpc} />
             </div>
 
             <div className="flex gap-3 border-t border-border pt-4">
@@ -286,61 +325,29 @@ export function OnboardingWizard() {
             </div>
             {!step2Complete && (
               <p className="text-[11px] text-muted">
-                A verified node connection, Peer ID, and consensus key are all
-                required before staking collateral.
+                A verified node connection, a valid Peer ID, and an unregistered
+                consensus key are all required before staking collateral.
               </p>
             )}
           </div>
         )}
 
         {/* Step 3 — Collateral */}
-        {step === 3 && (
-          <div className="animate-fade-in space-y-5">
-            <div className="rounded-xl border border-border bg-surface p-5 text-center">
-              <span className="block text-[11px] uppercase tracking-wide text-muted">
-                Required Self-Bond
-              </span>
-              <span className="font-mono text-3xl font-bold tabular-nums text-heading">
-                {formatQry(MIN_SELF_BOND_QRY)}
-              </span>
-              <p className="mx-auto mt-2 max-w-sm text-[11px] text-muted">
-                Locked as your validator collateral. Slashable for double-signing
-                or sustained downtime.
-              </p>
-            </div>
-
-            <dl className="divide-y divide-border rounded-lg border border-border bg-card px-4 text-xs">
-              <Row label="Miner" value={minerName} />
-              <Row label="Infrastructure" value={host} />
-              <Row label="Node verified" value="Yes — synced with testnet" />
-              <Row label="Admission" value="Phase 1 — manual approval" />
-            </dl>
-
-            <p className="rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-[11px] font-medium text-warning">
-              Wallet connection and on-chain staking arrive in Phase 6. This step
-              records your candidacy and the parameters for the
-              <code className="mx-1 font-mono">create-validator</code>
-              transaction; no funds move yet.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="rounded-lg border border-border-strong bg-card px-4 py-2 text-sm font-bold text-body transition-colors hover:bg-surface"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="flex-1 rounded-lg bg-brand py-2 text-sm font-bold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
-              >
-                {submitting ? "Submitting…" : "Lock Collateral & Submit Candidacy"}
-              </button>
-            </div>
-          </div>
+        {step === 3 && verifiedRpc && peer.ok && key.ok && (
+          <CollateralStep
+            input={{
+              minerName,
+              website,
+              description,
+              socials: { x: xHandle || undefined, discord: discord || undefined },
+              host,
+              peerId: peer.value,
+              consensusPubkey: key.value,
+              rpcEndpoint: verifiedRpc,
+            }}
+            onBack={() => setStep(2)}
+            onRegistered={setRegistered}
+          />
         )}
       </div>
     </div>
@@ -355,6 +362,9 @@ function Field({
   placeholder,
   required,
   mono,
+  maxLength,
+  error,
+  hint,
 }: {
   id: string;
   label: string;
@@ -363,6 +373,9 @@ function Field({
   placeholder?: string;
   required?: boolean;
   mono?: boolean;
+  maxLength?: number;
+  error?: string | null;
+  hint?: string | null;
 }) {
   return (
     <div className="space-y-1">
@@ -379,19 +392,97 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-lg border border-border-strong bg-card px-3 py-2 text-sm text-ink transition-colors focus:border-brand focus:outline-none ${
-          mono ? "font-mono" : ""
-        }`}
+        maxLength={maxLength}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? `${id}-note` : undefined}
+        className={`w-full rounded-lg border bg-card px-3 py-2 text-sm text-ink transition-colors focus:border-brand focus:outline-none ${
+          error ? "border-danger" : "border-border-strong"
+        } ${mono ? "font-mono" : ""}`}
       />
+      {(error || hint) && (
+        <p
+          id={`${id}-note`}
+          className={`text-[11px] ${error ? "font-medium text-danger" : "text-success"}`}
+        >
+          {error ?? hint}
+        </p>
+      )}
     </div>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+/**
+ * Outcome of publishing the off-chain profile after registration. Failure is
+ * a warning, not an error: the validator already exists on-chain.
+ */
+function PublishNotice({
+  initialError,
+  retry,
+}: {
+  initialError: string | null;
+  retry: () => Promise<string | null>;
+}) {
+  const [error, setError] = useState(initialError);
+  const [busy, setBusy] = useState(false);
+
+  if (!error) {
+    return (
+      <p className="mt-3 text-[11px] text-success-deep">
+        ✓ Profile published — Peer ID, RPC endpoint, and host saved.
+      </p>
+    );
+  }
   return (
-    <div className="flex justify-between gap-4 py-2.5">
-      <dt className="text-muted">{label}</dt>
-      <dd className="font-medium text-heading">{value}</dd>
+    <div className="mt-3 space-y-2 rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-[11px] font-medium text-warning">
+      <p>Your validator is registered on-chain. {error}</p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(await retry());
+          setBusy(false);
+        }}
+        className="rounded-lg border border-warning/40 bg-card px-3 py-1 font-bold text-warning transition-colors hover:bg-surface disabled:opacity-50"
+      >
+        {busy ? "Waiting for signature…" : "Sign & retry"}
+      </button>
     </div>
   );
+}
+
+type KeyStatus =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "free" }
+  | { state: "taken"; by: string }
+  | { state: "error"; message: string };
+
+/**
+ * Checks a well-formed consensus key against the live validator set. The
+ * chain rejects a reused key anyway, but finding out at step 3 — after the
+ * operator has connected a wallet and is ready to bond — is a bad time.
+ */
+function useConsensusKeyStatus(pubkey: string | null): KeyStatus {
+  const [result, setResult] = useState<{ key: string; status: KeyStatus } | null>(null);
+
+  useEffect(() => {
+    if (!pubkey) return;
+    let cancelled = false;
+    getProvider()
+      .onboarding.findValidatorByConsensusKey(pubkey)
+      .then(
+        (by): KeyStatus => (by ? { state: "taken", by } : { state: "free" }),
+        (err): KeyStatus => ({ state: "error", message: describeStakingError(err) }),
+      )
+      .then((status) => {
+        if (!cancelled) setResult({ key: pubkey, status });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pubkey]);
+
+  if (!pubkey) return { state: "idle" };
+  return result?.key === pubkey ? result.status : { state: "checking" };
 }

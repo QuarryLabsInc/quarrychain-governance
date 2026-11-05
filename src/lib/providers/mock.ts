@@ -1,11 +1,19 @@
-import { ACTIVE_SET_SIZE, CHAIN } from "@/lib/chain";
+import { ACTIVE_SET_SIZE, CHAIN, MIN_SELF_BOND_QRY } from "@/lib/chain";
 import { bandwidthFor, energyFor } from "@/lib/voting";
 import {
   MOCK_ACTIVE_VALIDATORS,
   MOCK_CANDIDATE_VALIDATORS,
 } from "@/lib/mock/validators";
 import { MOCK_WALLET } from "@/lib/mock/wallet";
+import {
+  findValidatorByConsensusKey,
+  getOnChainValidator,
+  getStakingBalance,
+  registerValidator,
+  waitForRegistration,
+} from "@/lib/providers/liveStaking";
 import { checkNodeConnection } from "@/lib/providers/node-check";
+import { listProfiles, registerProfile } from "@/lib/providers/profileStore";
 import type { DataProvider } from "@/lib/providers/types";
 import type {
   Proposal,
@@ -53,9 +61,12 @@ const MOCK_PENDING_APPLICATIONS: ValidatorApplication[] = [
       "Independent operator running redundant capacity across two EU regions.",
     socials: { x: "@northstarval" },
     host: "IONOS",
-    nodePeerId: "12D3KooWNorthstarPeerIdExample",
-    consensusPubkey: "quarryvalconspub1zcjduepqnorthstar",
-    selfBondQry: 500_000,
+    nodePeerId: "69929af9dd04b2e3537b0cc38d1180f2ff56691c",
+    consensusPubkey: "0vV61WxyWU5Lz/tuhGHEkkpaYJZccVg/e8IIrk4m8ns=",
+    rpcEndpoint: "https://rpc.northstar.example:8545",
+    selfBondQry: MIN_SELF_BOND_QRY,
+    validatorAddress: null,
+    txHash: null,
   },
   {
     minerName: "Cinder Block Labs",
@@ -63,9 +74,12 @@ const MOCK_PENDING_APPLICATIONS: ValidatorApplication[] = [
     description: "Infrastructure co-op focused on low-cost bare-metal validation.",
     socials: { discord: "discord.gg/cinderblock" },
     host: "BareMetal",
-    nodePeerId: "12D3KooWCinderBlockPeerIdExample",
-    consensusPubkey: "quarryvalconspub1zcjduepqcinder",
-    selfBondQry: 500_000,
+    nodePeerId: "479b4f2a51f0818f429af607c588085cef410882",
+    consensusPubkey: "N8xkmMghfx0IPp7Cp+hEfeJG9BpmB0EGwTQUWkDruyA=",
+    rpcEndpoint: "https://rpc.cinderblock.example:8545",
+    selfBondQry: MIN_SELF_BOND_QRY,
+    validatorAddress: null,
+    txHash: null,
   },
   {
     minerName: "Harbor Point Staking",
@@ -73,9 +87,12 @@ const MOCK_PENDING_APPLICATIONS: ValidatorApplication[] = [
     description: "Regional staking provider onboarding community delegators.",
     socials: {},
     host: "AWS",
-    nodePeerId: "12D3KooWHarborPointPeerIdExample",
-    consensusPubkey: "quarryvalconspub1zcjduepqharbor",
-    selfBondQry: 500_000,
+    nodePeerId: "eb8413d79e052c162cfa2f206579bc5e248c6cf3",
+    consensusPubkey: "0iI3quFFe1tzcoTIvkSSK5WaGKTV+srZUbgw4uVyyWg=",
+    rpcEndpoint: "https://rpc.harborpoint.example:8545",
+    selfBondQry: MIN_SELF_BOND_QRY,
+    validatorAddress: null,
+    txHash: null,
   },
 ];
 
@@ -101,6 +118,9 @@ export function createMockProvider(): DataProvider {
             (v) => v.id === id,
           ) ?? null,
         ),
+      // Real read, even in mock mode — validators who onboarded are on-chain.
+      getOnChain: (address) => getOnChainValidator(address),
+      listRegistered: listProfiles,
     },
 
     telemetry: {
@@ -123,32 +143,49 @@ export function createMockProvider(): DataProvider {
     },
 
     onboarding: {
-      // Real call, even in mock mode.
+      // Real calls, even in mock mode — onboarding never fakes the chain.
       checkNodeConnection,
-      submitApplication: (application: ValidatorApplication) =>
-        latency({ id: `app_${application.minerName.toLowerCase().replace(/\s+/g, "_")}` }, 600),
+      getStakingBalance,
+      findValidatorByConsensusKey,
+      registerValidator,
+      waitForRegistration,
+      // Real, like the rest of onboarding: the Supabase profile store.
+      submitApplication: registerProfile,
       /*
-       * Placeholder bring-up command. The ports and chain-id are correct for a
-       * CometBFT + EVM node (26656 p2p, 26657 consensus RPC, 8545 EVM RPC), but
-       * the image name, genesis URL, and seed peers are NOT confirmed — the
-       * chain team still owes us those (integration.md, open questions 1-2).
-       * The UI surfaces that caveat next to this block rather than presenting a
-       * guess as fact.
+       * Bring-up command, per the onboarding spec's template. Ports are right
+       * for a CometBFT + EVM node; the image tag and Cosmos chain-id are NOT
+       * confirmed by the chain team (integration.md, open questions 1-2), and
+       * the UI says so next to the block. The spec's `quarrychain_1234-1` was
+       * replaced: Evmos-style chain-ids embed the EVM id, which is 1129.
+       *
+       * No inline comments after a trailing `\` — that ends the line
+       * continuation and breaks the command when pasted.
        */
       buildNodeCommand: (host) => {
-        const profile = host === "BareMetal" ? "custom" : host.toLowerCase();
+        const firewall: Record<ServerHost, string[]> = {
+          AWS: [
+            "# AWS: allow inbound TCP 26656 (p2p) and 8545 (EVM RPC)",
+            "# in the instance's security group before starting.",
+          ],
+          IONOS: [
+            "# IONOS: allow inbound TCP 26656 (p2p) and 8545 (EVM RPC)",
+            "# in the server's firewall policy before starting.",
+          ],
+          BareMetal: [
+            "# Bare metal: open p2p and EVM RPC on the host firewall",
+            "sudo ufw allow 26656/tcp && sudo ufw allow 8545/tcp",
+          ],
+        };
         return [
-          "docker pull quarrychain/node:latest",
+          ...firewall[host],
           "",
-          "docker run -d --name quarrychain-validator \\",
-          "  -p 26656:26656 \\   # p2p",
-          "  -p 26657:26657 \\   # CometBFT RPC",
-          "  -p 8545:8545 \\     # EVM JSON-RPC",
-          `  -e CHAIN_ID=${CHAIN.id} \\`,
-          `  -e HOST_PROFILE=${profile} \\`,
-          "  -e GENESIS_URL=<pending> \\",
-          "  -e SEEDS=<nodeId@host:26656> \\",
-          "  quarrychain/node:latest",
+          "# Pull & launch QuarryChain Testnet Node Container",
+          "# (CometBFT RPC 26657 stays bound to localhost)",
+          "docker run -d --name quarrychain-node \\",
+          "  -p 26656:26656 -p 8545:8545 -p 127.0.0.1:26657:26657 \\",
+          "  -v ~/.quarrychain:/root/.quarrychain \\",
+          "  quarrychain/node:testnet-latest \\",
+          `  quarrychaind start --chain-id=quarrychain_${CHAIN.id}-1`,
         ].join("\n");
       },
     },

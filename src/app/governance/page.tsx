@@ -1,4 +1,5 @@
 import { GovernanceDashboard } from "@/components/governance/GovernanceDashboard";
+import { RegisteredValidators } from "@/components/governance/RegisteredValidators";
 import { getStats } from "@/lib/explorer/blockscout";
 import { getProvider } from "@/lib/providers";
 
@@ -12,10 +13,12 @@ export default async function GovernancePage() {
   const provider = getProvider();
   // The validator registry is simulated, but the count of nodes actually
   // producing blocks comes from the real chain — see NetworkTopology.
-  const [validators, status, chainStats] = await Promise.all([
+  const [validators, status, chainStats, registered] = await Promise.all([
     provider.registry.listActive(),
     provider.telemetry.getNetworkStatus(),
     getStats(),
+    // null = store unreachable; the section says so instead of showing "none".
+    provider.registry.listRegistered().catch(() => null),
   ]);
 
   return (
@@ -26,6 +29,7 @@ export default async function GovernancePage() {
       // governance page and the explorer disagree about the same chain.
       status={{ ...status, height: chainStats?.latestHeight ?? status.height }}
       liveProposerCount={chainStats?.activeProposers.length ?? null}
+      registered={<RegisteredValidators profiles={registered} />}
     />
   );
 }
