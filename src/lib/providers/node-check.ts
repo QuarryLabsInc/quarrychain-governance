@@ -6,7 +6,7 @@ import type { NodeCheckResult } from "@/lib/types";
  *
  * This runs in BOTH mock and live mode — it needs no backend, just the
  * operator's RPC endpoint. It is the honest core of the onboarding wizard's
- * "Check Connection" step: we verify the node is actually up, on chain 1129,
+ * "Check Connection" step: we verify the node is actually up, on chain 13133,
  * synced, and peered. We never fake a pass.
  *
  * CAVEAT for the live integration: this is a browser-origin request, so the

@@ -15,8 +15,9 @@ because the original spec's wording is misleading in one important way.
 | Property | Value |
 |---|---|
 | Chain type | **Cosmos-SDK + CometBFT consensus + EVM module** (Evmos / Cosmos-EVM lineage) |
-| EVM chain-id | **1129** (`0x469`) |
-| Block time | ~3.6s |
+| EVM chain-id | **13133** (`0x334d`); Cosmos chain-id `quarrychain_13133-1` (restarted 2026-11-05; the first testnet was 1129) |
+| Node software | `quarrychaind` (Cosmos EVM v0.7.3, repo `quarrychain-node`) |
+| Block time | ~3.2s |
 | Public EVM JSON-RPC | `https://rpc.testnet.quarrychain.network` |
 | Explorer (Blockscout) | `https://explorer.testnet.quarrychain.network` |
 | Cosmos REST (`:1317`) | **not publicly exposed** |
@@ -33,7 +34,7 @@ The spec says operators "stake into the validator registry contract." On a
 CometBFT chain that is not how it works. Validators register with a Cosmos
 **`create-validator`** transaction carrying:
 
-- an **ed25519 consensus public key** (the node's, from `tendermint show-validator`)
+- an **ed25519 consensus public key** (the node's, from `quarrychaind comet show-validator`)
 - a **self-delegation** of the native QRY staking coin (10,000 QRY minimum, set
   by the onboarding requirements; the chain's own floor is 1 aqry)
 
@@ -118,7 +119,7 @@ label the data source honestly.
 ### `onboarding.checkNodeConnection(rpcUrl)`
 → **Already implemented for real** in `src/lib/providers/node-check.ts`. Used by
 both mock and live. It probes the *operator's own* node:
-`eth_chainId === 1129`, `eth_blockNumber` within 10 blocks of the public tip,
+`eth_chainId === 13133`, `eth_blockNumber` within 10 blocks of the public tip,
 `net_peerCount > 0`.
 
 > **CORS caveat:** this is a browser-origin request. Most node configs reject it.
@@ -223,8 +224,8 @@ method server-side** — the UI hiding a button is not authorization.
 
 1. Node artifact — real docker image / binary name + version? The UI now uses
    the onboarding doc's `quarrychain/node:testnet-latest` + `quarrychaind`,
-   and Cosmos chain-id `quarrychain_1129-1` (the doc's `quarrychain_1234-1`
-   contradicts EVM id 1129) — all three unconfirmed.
+   and Cosmos chain-id `quarrychain_13133-1` (**confirmed** at the 2026-11-05
+   restart; binary `quarrychaind`).
 2. `genesis.json` URL + seed / persistent-peer strings for the 2 IONOS nodes?
 3. Can Cosmos REST (`:1317`) + CometBFT RPC (`:26657`) be exposed read-only?
 4. ~~Staking denom~~ — **answered 2026-10-13:** `aqry`, 18 dp.

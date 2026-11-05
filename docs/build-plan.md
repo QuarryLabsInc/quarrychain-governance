@@ -15,6 +15,7 @@ the provider interface — see [integration.md](integration.md).
 - [x] Provider/adapter seam (`DataProvider`) + mock implementation
 - [x] Domain types (`src/lib/types.ts`) as the frontend/backend contract
 - [x] Chain constants from live testnet interrogation (chain-id 1129)
+- [x] Restarted testnet: chain 13133 + Cosmos EVM staking ABI (2026-11-05)
 - [x] Mock registry: 21 active + 4 candidates, 2 flagged as real IONOS nodes
 - [x] Real EVM-RPC node probe for onboarding "Check Connection"
 - [x] `docs/integration.md` handoff guide
